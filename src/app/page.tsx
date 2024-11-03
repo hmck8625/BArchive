@@ -37,6 +37,12 @@ interface Memory {
   relatedMemos: string[]
 }
 
+interface MemoryRelation {
+  source_memo_id: string;
+  target_memo_id: string;
+  // 必要に応じて、関係の追加情報を定義
+  // 例: created_at: string;
+}
 
 export default function Component() {
   const [isMemoOpen, setIsMemoOpen] = useState(false)
@@ -83,16 +89,14 @@ export default function Component() {
   
       if (relationsError) throw relationsError
   
+
       // メモデータに関連メモの情報を追加
       const memoriesWithRelations = memoriesData.map(memo => ({
         ...memo,
         relatedMemos: relationsData
           .filter(rel => rel.source_memo_id === memo.id)
-          .map(rel => ({
-            id: rel.target_memo.id,
-            title: rel.target_memo.title
-          }))
-      }))
+          .map(rel => rel.target_memo_id) // 関連メモのIDのみ抽出
+      }));
   
       setMemories(memoriesWithRelations)
       setFilteredMemories(memoriesWithRelations) // 初期状態では全てのメモを表示
