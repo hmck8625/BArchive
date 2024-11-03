@@ -23,7 +23,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-interface Memo {
+// D3のSimulationNodeDatumを拡張
+interface MemoNode extends d3.SimulationNodeDatum {
   id: string
   title: string
   content: string
@@ -35,6 +36,8 @@ interface Memo {
     name: string
   }
   relatedMemos: string[]
+  x?: number
+  y?: number
 }
 
 interface Category {
@@ -42,13 +45,18 @@ interface Category {
   name: string
 }
 
+interface LinkDatum extends d3.SimulationLinkDatum<MemoNode> {
+  source: string | MemoNode
+  target: string | MemoNode
+}
+
 export default function MemoVisualization() {
   const svgRef = useRef<SVGSVGElement>(null)
-  const [selectedNode, setSelectedNode] = useState<Memo | null>(null)
-  const [memos, setMemos] = useState<Memo[]>([])
+  const [selectedNode, setSelectedNode] = useState<MemoNode | null>(null)
+  const [memos, setMemos] = useState<MemoNode[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [nodeDistance, setNodeDistance] = useState(100)
+  const [nodeDistance, setNodeDistance] = useState<number>(100)
   const [isLoading, setIsLoading] = useState(true)
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown>>()
   const containerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined>>()
@@ -57,7 +65,6 @@ export default function MemoVisualization() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // カテゴリの取得
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
           .select('id, name')
@@ -66,7 +73,6 @@ export default function MemoVisualization() {
         if (categoriesError) throw categoriesError
         setCategories(categoriesData || [])
 
-        // メモの取得
         const { data: memosData, error: memosError } = await supabase
           .from('memories')
           .select(`
@@ -85,28 +91,27 @@ export default function MemoVisualization() {
 
         if (memosError) throw memosError
 
-        // 関連メモの取得
         const { data: relationsData, error: relationsError } = await supabase
           .from('memory_relations')
           .select('source_memo_id, target_memo_id')
 
         if (relationsError) throw relationsError
 
-        const memosWithRelations = memosData.map(memo => ({
-          ...memo,
-          relatedMemos: relationsData
-            .filter(rel => rel.source_memo_id === memo.id)
-            .map(rel => rel.target_memo_id)
-        }))
+        const memosWithRelations = memosData.map(memo => {
+          const typedMemo: MemoNode = {
+            ...memo,
+            categories: memo.categories[0], // 配列の最初の要素を取得
+            relatedMemos: relationsData
+              .filter(rel => rel.source_memo_id === memo.id)
+              .map(rel => rel.target_memo_id)
+          }
+          return typedMemo
+        })
 
         setMemos(memosWithRelations)
         setIsLoading(false)
       } catch (error) {
-        if (error instanceof Error) {
-          console.error('Error fetching data:', error.message)
-        } else {
-          console.error('Error fetching data:', error)
-        }
+        console.error('Error fetching data:', error)
         setIsLoading(false)
       }
     }
@@ -114,7 +119,6 @@ export default function MemoVisualization() {
     fetchData()
   }, [])
 
-  // メモ更新後のデータ再取得処理
   const handleMemoUpdate = async () => {
     try {
       const { data: memosData, error: memosError } = await supabase
@@ -141,31 +145,30 @@ export default function MemoVisualization() {
 
       if (relationsError) throw relationsError
 
-      const updatedMemosWithRelations = memosData.map(memo => ({
-        ...memo,
-        relatedMemos: relationsData
-          .filter(rel => rel.source_memo_id === memo.id)
-          .map(rel => rel.target_memo_id)
-      }))
+      const updatedMemosWithRelations = memosData.map(memo => {
+        const typedMemo: MemoNode = {
+          ...memo,
+          categories: memo.categories[0], // 配列の最初の要素を取得
+          relatedMemos: relationsData
+            .filter(rel => rel.source_memo_id === memo.id)
+            .map(rel => rel.target_memo_id)
+        }
+        return typedMemo
+      })
+      
 
       setMemos(updatedMemosWithRelations)
       return true
     } catch (error) {
-      if (error instanceof Error) {
-        console.error('Error updating memos:', error.message)
-      } else {
-        console.error('Error updating memos:', error)
-      }
+      console.error('Error updating memos:', error)
       return false
     }
   }
 
-  // カテゴリごとの色スケールを作成
   const categoryColorScale = d3.scaleOrdinal<string>()
     .domain(categories.map(c => c.id))
     .range(d3.schemePaired)
 
-    
   useEffect(() => {
     if (!svgRef.current || isLoading || memos.length === 0) return
 
@@ -183,7 +186,7 @@ export default function MemoVisualization() {
       ? memos
       : memos.filter(memo => memo.category_id === selectedCategory)
 
-    const linkData = filteredMemos.flatMap(memo => 
+    const linkData: LinkDatum[] = filteredMemos.flatMap(memo => 
       memo.relatedMemos
         .filter(relatedId => filteredMemos.some(m => m.id === relatedId))
         .map(relatedId => ({
@@ -191,19 +194,17 @@ export default function MemoVisualization() {
           target: relatedId
         }))
     )
-    
 
-    // モバイル向けに調整された力学シミュレーション
-    const simulation = d3.forceSimulation(filteredMemos)
-      .force('link', d3.forceLink(linkData)
-        .id((d: any) => d.id)
+    const simulation = d3.forceSimulation<MemoNode>(filteredMemos)
+      .force('link', d3.forceLink<MemoNode, LinkDatum>(linkData)
+        .id(d => d.id)
         .distance(nodeDistance))
       .force('charge', d3.forceManyBody()
         .strength(-120)
         .distanceMax(200))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius(25))
-      .alphaDecay(0.01) // よりスムーズな動きのために減衰を調整
+      .alphaDecay(0.01)
 
     const link = g.append('g')
       .attr('class', 'links')
@@ -220,14 +221,12 @@ export default function MemoVisualization() {
       .data(filteredMemos)
       .join('g')
 
-    // カテゴリに基づいて色付けされたノード
     nodes.append('circle')
-      .attr('r', d => Math.min(d.importance * 2.5, 15)) // モバイル向けに小さめのサイズ
+      .attr('r', d => Math.min((d.importance || 1) * 2.5, 15))
       .attr('fill', d => categoryColorScale(d.category_id))
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
 
-    // モバイル向けに調整されたテキスト
     nodes.append('text')
       .text(d => d.title.length > 10 ? d.title.slice(0, 10) + '...' : d.title)
       .attr('dy', -15)
@@ -236,7 +235,6 @@ export default function MemoVisualization() {
       .attr('fill', '#333')
       .attr('pointer-events', 'none')
 
-    // タッチデバイス対応のズーム設定
     const zoom = d3.zoom()
       .scaleExtent([0.2, 3])
       .on('zoom', (event) => {
@@ -246,26 +244,25 @@ export default function MemoVisualization() {
     zoomRef.current = zoom
     svg.call(zoom as any)
 
-    // タッチデバイス対応のドラッグ
-    function drag(simulation: d3.Simulation<d3.SimulationNodeDatum, undefined>) {
-      function dragstarted(event: any) {
+    function drag(simulation: d3.Simulation<MemoNode, undefined>) {
+      function dragstarted(event: d3.D3DragEvent<Element, MemoNode, MemoNode>) {
         if (!event.active) simulation.alphaTarget(0.3).restart()
         event.subject.fx = event.subject.x
         event.subject.fy = event.subject.y
       }
       
-      function dragged(event: any) {
+      function dragged(event: d3.D3DragEvent<Element, MemoNode, MemoNode>) {
         event.subject.fx = event.x
         event.subject.fy = event.y
       }
       
-      function dragended(event: any) {
+      function dragended(event: d3.D3DragEvent<Element, MemoNode, MemoNode>) {
         if (!event.active) simulation.alphaTarget(0)
         event.subject.fx = null
         event.subject.fy = null
       }
       
-      return d3.drag()
+      return d3.drag<Element, MemoNode>()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended)
@@ -275,16 +272,15 @@ export default function MemoVisualization() {
 
     simulation.on('tick', () => {
       link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y)
+        .attr('x1', d => (d.source as MemoNode).x || 0)
+        .attr('y1', d => (d.source as MemoNode).y || 0)
+        .attr('x2', d => (d.target as MemoNode).x || 0)
+        .attr('y2', d => (d.target as MemoNode).y || 0)
 
-      nodes.attr('transform', (d: any) => `translate(${d.x},${d.y})`)
+      nodes.attr('transform', d => `translate(${d.x || 0},${d.y || 0})`)
     })
 
-    // タッチ対応のノード選択
-    nodes.on('click', (event, d: Memo) => {
+    nodes.on('click', (event: MouseEvent, d: MemoNode) => {
       event.stopPropagation()
       setSelectedNode(d)
       const relatedNodes = filteredMemos.filter(memo => 
@@ -294,11 +290,13 @@ export default function MemoVisualization() {
       link.attr('opacity', 0.1)
       
       d3.selectAll(relatedNodes.map(n => 
-        nodes.filter((d: any) => d.id === n.id).nodes()
+        nodes.filter((d: MemoNode) => d.id === n.id).nodes()
       ).flat()).attr('opacity', 1)
       
       d3.selectAll(relatedNodes.map(n => 
-        link.filter((l: any) => l.source.id === n.id || l.target.id === n.id).nodes()
+        link.filter((l: LinkDatum) => 
+          (l.source as MemoNode).id === n.id || (l.target as MemoNode).id === n.id
+        ).nodes()
       ).flat()).attr('opacity', 1)
     })
 
@@ -310,7 +308,6 @@ export default function MemoVisualization() {
       }
     })
 
-    // レスポンシブ対応
     const handleResize = () => {
       const width = window.innerWidth
       const height = window.innerHeight
@@ -327,15 +324,14 @@ export default function MemoVisualization() {
     }
   }, [memos, isLoading, selectedCategory, nodeDistance, categories])
 
-  // 全体表示の処理
   const handleFitView = () => {
     if (!svgRef.current || !containerRef.current || !zoomRef.current) return
     const svg = d3.select(svgRef.current)
     const g = containerRef.current
     const zoom = zoomRef.current
     const bounds = (g.node() as SVGGElement).getBBox()
-    const width = svg.attr('width')
-    const height = svg.attr('height')
+    const width = parseInt(svg.attr('width'))
+    const height = parseInt(svg.attr('height'))
     const scale = 0.9 / Math.max(bounds.width / width, bounds.height / height)
     const translateX = (width - scale * (bounds.x * 2 + bounds.width)) / 2
     const translateY = (height - scale * (bounds.y * 2 + bounds.height)) / 2
@@ -349,7 +345,6 @@ export default function MemoVisualization() {
 
   return (
     <div className="w-full h-screen relative">
-      {/* モバイル向けコントロールパネル */}
       <div className="absolute top-4 left-4 right-4 z-10 flex flex-col gap-2 bg-white/90 p-2 rounded-lg shadow-lg">
         <div className="flex gap-2">
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -370,7 +365,6 @@ export default function MemoVisualization() {
           </Button>
         </div>
         
-        {/* ノード間隔調整スライダー */}
         <div className="flex items-center gap-2">
           <Move className="h-4 w-4" />
           <div className="flex-grow">
