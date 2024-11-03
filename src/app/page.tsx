@@ -3,9 +3,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { ChatWindow } from "@/components/ChatWindow"
 import { SearchMemories } from '@/components/SearchMemories'
 import {
@@ -13,14 +10,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog"
-import { Library, MoreHorizontal, MessageCircle, PenLine, User } from "lucide-react"
+import { Library, MessageCircle, PenLine, User } from "lucide-react"
 import { createClient } from '@supabase/supabase-js'
 import { MemoriesSection } from '@/components/MemoriesSection'
 import MemoVisualization from '@/components/MemoVisualization'
 import { MemoDialog } from '@/components/MemoDialog'
-
 
 // Supabaseクライアントの初期化
 const supabase = createClient(
@@ -30,7 +25,6 @@ const supabase = createClient(
 
 export default function Component() {
   const [isMemoOpen, setIsMemoOpen] = useState(false)
-  const [memoText, setMemoText] = useState("")
   const [memories, setMemories] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -188,18 +182,6 @@ export default function Component() {
     }
   }
 
-  // 日付のフォーマット関数
-  const formatDate = (dateString) => {
-    const date = new Date(dateString)
-    return new Intl.DateTimeFormat('ja-JP', {
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: false
-    }).format(date)
-  }
-
   return (
     <div className="min-h-screen bg-[#FAF9F6] relative">
       <div className="p-4 pb-20">
@@ -231,7 +213,6 @@ export default function Component() {
             <h1 className="text-2xl font-bold text-gray-800">Keep memories with me.</h1>
           </div>
   
-
         {/* Search Bar */}
         <div className="mb-6">
           <SearchMemories 
@@ -270,7 +251,6 @@ export default function Component() {
         onSave={handleMemoSave}
         supabase={supabase}
       />
-
 
       {/* Visualization Dialog */}
       <Dialog open={isVisualizationOpen} onOpenChange={setIsVisualizationOpen}>

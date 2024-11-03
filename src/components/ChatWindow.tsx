@@ -38,7 +38,7 @@ interface ExistingMemo {
 
 export function ChatWindow({ open, onClose }: ChatWindowProps) {
   const [input, setInput] = useState('');
-  const { messages, isLoading, sendMessage, notePreview, generateNotePreview, saveNote } = useChat();
+  const { messages, isLoading, sendMessage, generateNotePreview, saveNote } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
   // メモ作成用の状態
@@ -177,9 +177,12 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
 
   // LoadingAnimation コンポーネントの追加
   function LoadingAnimation() {
-    const [frame, setFrame] = useState(0);
-    const frames = ['😊', '😄', '😃', '😀', '😊'];}
-
+    return (
+      <div className="flex items-center justify-center">
+        <div className="animate-bounce">😊</div>
+      </div>
+    );
+  }
     return (
       <>
         <Dialog open={open} onOpenChange={onClose}>

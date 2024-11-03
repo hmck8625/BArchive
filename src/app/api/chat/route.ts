@@ -1,4 +1,4 @@
-// app/api/chat/chat.ts
+// app/api/chat/route.ts
 import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 
@@ -12,11 +12,16 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// エラーハンドリング用の型
-type ErrorResponse = {
-  error: string;
-  details?: any;
-};
+// 型定義
+type ChatMessage = {
+  message: string;
+}
+
+type APIErrorDetails = {
+  message: string;
+  type?: string;
+  code?: string;
+}
 
 export async function POST(request: Request) {
   console.log('--- Chat API Request Started ---');
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
 
     // リクエストボディの取得
     console.log('Parsing request body...');
-    let messageData;
+    let messageData: ChatMessage;
     try {
       messageData = await request.json();
       console.log('Received message data:', messageData);
@@ -97,14 +102,16 @@ export async function POST(request: Request) {
         type: error.type
       });
       
+      const errorDetails: APIErrorDetails = {
+        message: error.message,
+        type: error.type,
+        code: error.code
+      };
+      
       return NextResponse.json(
         {
           error: 'OpenAI API Error',
-          details: {
-            message: error.message,
-            type: error.type,
-            code: error.code
-          }
+          details: errorDetails
         },
         { status: error.status || 500 }
       );
@@ -126,16 +133,5 @@ export async function POST(request: Request) {
     );
   } finally {
     console.log('--- Chat API Request Ended ---');
-  }
-}
-
-// 環境変数の検証用ヘルパー関数（必要に応じて使用）
-function validateEnvironment() {
-  const requiredEnvVars = ['OPENAI_API_KEY'];
-  const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-  
-  if (missingEnvVars.length > 0) {
-    console.error('Missing required environment variables:', missingEnvVars);
-    throw new Error(`Missing environment variables: ${missingEnvVars.join(', ')}`);
   }
 }
