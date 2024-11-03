@@ -58,7 +58,6 @@ export const useChat = () => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
         throw new Error(`API call failed: ${response.status}`);
       }
 
