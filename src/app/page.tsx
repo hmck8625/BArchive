@@ -19,18 +19,35 @@ import { MemoDialog } from '@/components/MemoDialog'
 
 // Supabaseクライアントの初期化
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "null",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "null"
 )
+
+interface Memory {
+  id: string
+  title: string
+  content: string
+  created_at: string
+  category_id: string
+  importance: number
+  categories: {
+    id: string
+    name: string
+  }
+  relatedMemos: string[]
+}
+
 
 export default function Component() {
   const [isMemoOpen, setIsMemoOpen] = useState(false)
-  const [memories, setMemories] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isVisualizationOpen, setIsVisualizationOpen] = useState(false)
-  const [filteredMemories, setFilteredMemories] = useState(memories)
 
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [filteredMemories, setFilteredMemories] = useState<Memory[]>([]);
+  
+  
   // メモリーの取得
   useEffect(() => {
     fetchMemories()
@@ -92,10 +109,10 @@ export default function Component() {
   }, [])
 
   // 検索結果を処理する関数
-  const handleSearchResults = useCallback((results) => {
-      console.log('Setting filtered memories:', results)
-      setFilteredMemories(results)
-    }, [])
+  const handleSearchResults = useCallback((results: Memory[]) => {
+    console.log('Setting filtered memories:', results);
+    setFilteredMemories(results);
+  }, []);
 
   const handleMemoSave = async (memoData: {
     content: string
