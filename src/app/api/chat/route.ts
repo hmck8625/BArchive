@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       const errorDetails: APIErrorDetails = {
         message: error.message,
         type: error.type,
-        code: error.code
+        code: error.code !== null ? error.code : undefined
       };
       
       return NextResponse.json(

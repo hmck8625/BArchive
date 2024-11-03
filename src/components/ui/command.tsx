@@ -35,6 +35,8 @@ const CommandDialog = ({ children, ...props }: DialogProps) => {
   )
 }
 
+// ... 残りのコードは変更なし
+
 const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
