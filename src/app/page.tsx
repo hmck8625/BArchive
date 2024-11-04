@@ -240,7 +240,7 @@ export default function Component() {
               <div className="w-3 h-7 bg-orange-300 rounded-sm transform hover:scale-y-110 transition-transform" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Let's archive your learning</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Lets archive your learning</h1>
         </div>
   
         {/* Search Bar */}
