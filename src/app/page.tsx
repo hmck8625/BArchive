@@ -230,16 +230,18 @@ export default function Component() {
   
         {/* Main Content */}
         <div className="max-w-2xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-2">
-              <div className="flex">
-                <div className="w-8 h-8 bg-purple-300 rounded-full" />
-                <div className="w-8 h-8 bg-orange-300 rounded-full -ml-2" />
-              </div>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-2">
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-8 bg-purple-400 rounded-sm transform hover:scale-y-110 transition-transform" />
+              <div className="w-3 h-6 bg-purple-300 rounded-sm transform hover:scale-y-110 transition-transform" />
+              <div className="w-3 h-10 bg-orange-400 rounded-sm transform hover:scale-y-110 transition-transform" />
+              <div className="w-3 h-7 bg-orange-300 rounded-sm transform hover:scale-y-110 transition-transform" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-800">Keep memories with me.</h1>
           </div>
+          <h1 className="text-2xl font-bold text-gray-800">Let's archive your learning</h1>
+        </div>
   
         {/* Search Bar */}
         <div className="mb-6">
