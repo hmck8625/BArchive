@@ -1,6 +1,8 @@
+//components/EditMemoDialog.tsx
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,36 +32,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Slider } from "@/components/ui/slider"
-import { Check, ChevronsUpDown, X } from "lucide-react"
+import { Check, ChevronsUpDown, X, Plus, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SupabaseClient } from '@supabase/supabase-js'
-
-interface Category {
-  id: string
-  name: string
-}
-
-interface ExistingMemo {
-  id: string
-  title: string
-}
-
-interface Memo {
-  id: string
-  title: string
-  content: string
-  category_id: string
-  importance: number
-  created_at: string
-  categories: {
-    id: string
-    name: string
-  }
-  relatedMemos: string[]
-}
+import { useAuth } from '@/lib/hooks/useAuth'  // useAuthをインポート
+import { Memory, Category, ExistingMemo} from '@/types'  // 共通の型をインポート
 
 interface EditMemoDialogProps {
-  memo: Memo | null
+  memo: Memory | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSave: () => void
@@ -76,6 +56,14 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
   const [existingMemos, setExistingMemos] = useState<ExistingMemo[]>([])
   const [openCombobox, setOpenCombobox] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { user } = useAuth() 
+
+  // 新規カテゴリ作成関連の状態
+  const [isNewCategoryDialogOpen, setIsNewCategoryDialogOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false)
+
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   // 初期データのロード
   useEffect(() => {
@@ -87,19 +75,21 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
       setRelatedMemos(memo.relatedMemos || [])
     }
     if (memo?.id) {
-      fetchRelatedMemos(memo.id);
+      fetchRelatedMemos(memo.id)
     }
   }, [memo])
 
-  // カテゴリと既存メモのロード
   useEffect(() => {
     const fetchData = async () => {
+      if (!user) return  // ユーザーチェックを追加
+
       try {
         // カテゴリの取得
         const { data: categoriesData } = await supabase
           .from('categories')
           .select('id, name')
           .order('name')
+          .eq('user_id', user.id)
 
         setCategories(categoriesData || [])
 
@@ -109,6 +99,7 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
             .from('memories')
             .select('id, title')
             .neq('id', memo.id)
+            .eq('user_id', user.id)
             .order('created_at', { ascending: false })
 
           setExistingMemos(memosData || [])
@@ -121,17 +112,59 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
     if (open) {
       fetchData()
     }
-  }, [open, memo, supabase])
+  }, [open, memo, supabase, user])  // user を依存配列に追加
 
+  // カテゴリ更新処理
+  const handleUpdateCategory = async () => {
+    if (!user || !editingCategory || !newCategoryName.trim()) return;
+
+    setIsCreatingCategory(true);
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update({ name: newCategoryName.trim() })
+        .eq('id', editingCategory.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // カテゴリリストを更新
+      setCategories(prev => 
+        prev.map(cat => 
+          cat.id === editingCategory.id 
+            ? { ...cat, name: newCategoryName.trim() } 
+            : cat
+        )
+      );
+      
+      // ダイアログを閉じる
+      setIsNewCategoryDialogOpen(false);
+      setNewCategoryName("");
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      alert('Failed to update category');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
+
+  // カテゴリ編集を開始する関数
+  const startEditingCategory = (category: Category) => {
+    setEditingCategory(category);
+    setNewCategoryName(category.name);
+    setIsNewCategoryDialogOpen(true);
+  };
+
+  // handleSave の修正
   const handleSave = async () => {
-    if (!memo || !title.trim() || !content.trim() || !categoryId) {
+    if (!memo || !title.trim() || !content.trim() || !categoryId || !user) {
       alert('Please fill in all required fields')
       return
     }
-  
+
     setIsLoading(true)
     try {
-      // 基本的なメモ情報の更新
       const { error: updateError } = await supabase
         .from('memories')
         .update({
@@ -139,19 +172,13 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
           content,
           category_id: categoryId,
           importance,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          user_id: user.id  // user_id を追加
         })
         .eq('id', memo.id)
 
-        console.log('Updating memo:', {
-          id: memo.id,
-          title,
-          content,
-          category_id: categoryId,
-          importance
-        })
-  
       if (updateError) throw updateError
+
   
       // 関連メモの更新
       if (relatedMemos.length > 0) {
@@ -210,59 +237,115 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
     }
   };
   
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Edit Memo</DialogTitle>
-        </DialogHeader>
+    // カテゴリ作成処理
+    const handleCreateCategory = async () => {
+      if (!user || !newCategoryName.trim()) return
+  
+      setIsCreatingCategory(true)
+      try {
+        const { data: newCategory, error } = await supabase
+          .from('categories')
+          .insert({
+            name: newCategoryName.trim(),
+            user_id: user.id
+          })
+          .select()
+          .single()
+  
+        if (error) throw error
+  
+        // カテゴリリストを更新
+        setCategories(prev => [...prev, newCategory])
         
-        <div className="grid gap-4 py-4">
-          {/* Title input */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <Textarea
-              placeholder="Memo title..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="min-h-[60px]"
-            />
-          </div>
-  
-          {/* Content input */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">
-              Content <span className="text-red-500">*</span>
-            </label>
-            <Textarea
-              placeholder="Memo content..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="min-h-[100px]"
-            />
-          </div>
-  
-          {/* Category selection */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">
-              Category <span className="text-red-500">*</span>
-            </label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        // 新しく作成したカテゴリを選択
+        setCategoryId(newCategory.id)
+        
+        // ダイアログを閉じる
+        setIsNewCategoryDialogOpen(false)
+        setNewCategoryName("")
+      } catch (error) {
+        console.error('Error creating category:', error)
+        alert('Failed to create category')
+      } finally {
+        setIsCreatingCategory(false)
+      }
+    }
+
+    return (
+      <>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Memo</DialogTitle>
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4">
+              {/* Title input (unchanged) */}
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  placeholder="Memo title..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="min-h-[60px]"
+                />
+              </div>
+        
+              {/* Content input (unchanged) */}
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">
+                  Content <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  placeholder="Memo content..."
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="min-h-[100px]"
+                />
+              </div>
+        
+              {/* Category selection with creation button */}
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">
+                  Category <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <Select value={categoryId} onValueChange={setCategoryId}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id} className="flex justify-between items-center">
+                          <span>{cat.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ml-2 h-6 w-6"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              startEditingCategory(cat);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsNewCategoryDialogOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
   
           {/* Importance slider */}
           <div className="grid gap-2">
@@ -308,19 +391,74 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: E
             </div>
           </div>
         </div>
-  
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSave}
-            disabled={isLoading || !title.trim() || !content.trim() || !categoryId}
-          >
-            {isLoading ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSave}
+              disabled={isLoading || !title.trim() || !content.trim() || !categoryId}
+            >
+              {isLoading ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Creation/Edit Dialog */}
+      <Dialog 
+        open={isNewCategoryDialogOpen} 
+        onOpenChange={(open) => {
+          setIsNewCategoryDialogOpen(open);
+          if (!open) {
+            setEditingCategory(null);
+            setNewCategoryName("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? 'Edit Category' : 'Create New Category'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">
+                Category Name <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                placeholder="Enter category name..."
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsNewCategoryDialogOpen(false);
+                setEditingCategory(null);
+                setNewCategoryName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
+              disabled={isCreatingCategory || !newCategoryName.trim()}
+            >
+              {isCreatingCategory 
+                ? (editingCategory ? 'Updating...' : 'Creating...') 
+                : (editingCategory ? 'Update' : 'Create')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

@@ -1,73 +1,34 @@
-// hooks/useMemorySearch.ts
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo } from 'react'
+import { Memory } from '@/types'
 
-interface Category {
-  id: string
-  name: string
-}
-
-interface RelatedMemo {
-  id: string
-  title: string
-}
-
-interface Memory {
-  id: string
-  title: string
-  content: string
-  category_id: string
-  importance: number
-  created_at: string
-  categories: Category
-  relatedMemos: RelatedMemo[]
-}
-
-export const useMemorySearch = (memories: Memory[]) => {
+export function useMemorySearch(memories: Memory[]) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Memory[]>(memories)
 
-  const searchMemories = useCallback((query: string) => {
-    console.log('Searching with query:', query)
-    console.log('Current memories:', memories)
-    
-    const lowercaseQuery = query.toLowerCase().trim()
-    
-    if (!lowercaseQuery) {
-      console.log('Empty query, showing all memories')
-      setSearchResults(memories)
-      return
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return memories
     }
 
-    const filtered = memories.filter(memory => {
-      // デバッグ用に各メモリの検索対象値をログ出力
-      console.log('Checking memory:', {
-        title: memory.title,
-        content: memory.content,
-        category: memory.categories?.name
-      })
+    const query = searchQuery.toLowerCase()
+    return memories.filter(memory => {
+      const titleMatch = memory.title?.toLowerCase().includes(query)
+      const contentMatch = memory.content?.toLowerCase().includes(query)
+      const categoryMatch = memory.categories?.name?.toLowerCase().includes(query)
       
-      const titleMatch = memory.title.toLowerCase().includes(lowercaseQuery)
-      const contentMatch = memory.content.toLowerCase().includes(lowercaseQuery)
-      const categoryMatch = memory.categories?.name.toLowerCase().includes(lowercaseQuery)
-      
-      const isMatch = titleMatch || contentMatch || categoryMatch
-      console.log('Match result:', isMatch)
-      
-      return isMatch
+      return titleMatch || contentMatch || categoryMatch
     })
-
-    console.log('Filtered results:', filtered)
-    setSearchResults(filtered)
-  }, [memories])
-
-  useEffect(() => {
-    searchMemories(searchQuery)
-  }, [searchQuery, memories, searchMemories])
+  }, [memories, searchQuery])
 
   return {
     searchQuery,
     setSearchQuery,
     searchResults,
-    searchMemories
-  }
+  } as const  // 戻り値の型を厳密に
+}
+
+// 戻り値の型を明示的に定義（必要に応じて）
+export type UseMemorySearchReturn = {
+  searchQuery: string
+  setSearchQuery: (query: string) => void
+  searchResults: Memory[]
 }

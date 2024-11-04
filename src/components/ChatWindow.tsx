@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { useChat } from '@/lib/hooks/useChat';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { createClient } from '@supabase/supabase-js'
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Pencil } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from '@/lib/hooks/useAuth';  // useAuthを追加
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ interface ExistingMemo {
 }
 
 export function ChatWindow({ open, onClose }: ChatWindowProps) {
+  const { user } = useAuth();  // useAuthを使用
   const [input, setInput] = useState('');
   const { messages, isLoading, sendMessage, generateNotePreview, saveNote } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -51,15 +53,22 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [existingMemos, setExistingMemos] = useState<ExistingMemo[]>([]);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
+
+  // カテゴリ作成用の状態を追加
+  const [isNewCategoryDialogOpen, setIsNewCategoryDialogOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
 
   // カテゴリーと既存メモのフェッチ
   useEffect(() => {
-    if (isNoteDialogOpen) {
+    if (isNoteDialogOpen && user) {  // userチェックを追加
       const fetchData = async () => {
         try {
           const { data: categoriesData, error: categoriesError } = await supabase
             .from('categories')
             .select('id, name')
+            .eq('user_id', user.id)  // ユーザーのカテゴリのみを取得
             .order('name');
 
           if (categoriesError) throw categoriesError;
@@ -68,6 +77,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
           const { data: memosData, error: memosError } = await supabase
             .from('memories')
             .select('id, title')
+            .eq('user_id', user.id)  // ユーザーのメモのみを取得
             .order('created_at', { ascending: false });
 
           if (memosError) throw memosError;
@@ -79,7 +89,79 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
 
       fetchData();
     }
-  }, [isNoteDialogOpen]);
+  }, [isNoteDialogOpen, user]);  // user を依存配列に追加
+
+
+  // カテゴリ更新ハンドラー
+  const handleUpdateCategory = async () => {
+    if (!user || !editingCategory || !newCategoryName.trim()) return;
+
+    setIsCreatingCategory(true);
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update({ name: newCategoryName.trim() })
+        .eq('id', editingCategory.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // カテゴリリストを更新
+      setCategories(prev => 
+        prev.map(cat => 
+          cat.id === editingCategory.id 
+            ? { ...cat, name: newCategoryName.trim() } 
+            : cat
+        )
+      );
+      
+      // ダイアログを閉じる
+      setIsNewCategoryDialogOpen(false);
+      setNewCategoryName("");
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      alert('Failed to update category');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
+
+  // カテゴリ編集を開始する関数
+  const startEditingCategory = (category: Category) => {
+    setEditingCategory(category);
+    setNewCategoryName(category.name);
+    setIsNewCategoryDialogOpen(true);
+  };
+
+  // カテゴリ作成ハンドラー
+  const handleCreateCategory = async () => {
+    if (!user || !newCategoryName.trim()) return;
+
+    setIsCreatingCategory(true);
+    try {
+      const { data: newCategory, error } = await supabase
+        .from('categories')
+        .insert({
+          name: newCategoryName.trim(),
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCategories(prev => [...prev, newCategory]);
+      setSelectedCategory(newCategory.id);
+      setIsNewCategoryDialogOpen(false);
+      setNewCategoryName("");
+    } catch (error) {
+      console.error('Error creating category:', error);
+      alert('Failed to create category');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
 
   // Convert to Note ボタンのハンドラー
   const handleConvertToNote = async () => {
@@ -107,7 +189,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
 
   // メモの保存ハンドラー
   const handleSaveNote = async () => {
-    if (!editedTitle.trim() || !editedContent.trim() || !selectedCategory) {
+    if (!editedTitle.trim() || !editedContent.trim() || !selectedCategory || !user) {
       alert('Please fill in all required fields');
       return;
     }
@@ -117,7 +199,8 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
       content: editedContent.trim(),
       category_id: selectedCategory,
       importance,
-      relatedMemos: relatedMemos.map(memo => memo.id)
+      relatedMemos: relatedMemos.map(memo => memo.id),
+      user_id: user.id  // user_idを追加
     };
 
     const result = await saveNote(noteData);
@@ -150,7 +233,6 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
     setRelatedMemos(prev => prev.filter(m => m.id !== memoId));
   };
 
-
   // メッセージやローディング状態が変更されたときのスクロール
   useEffect(() => {
     scrollToBottom();
@@ -159,7 +241,6 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
   // ウィンドウが開かれたときのスクロール
   useEffect(() => {
     if (open) {
-      // slight delay to ensure content is rendered
       setTimeout(() => {
         scrollToBottom();
       }, 100);
@@ -175,7 +256,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
     }
   };
 
-  // LoadingAnimation コンポーネントの追加
+  // LoadingAnimation コンポーネント
   function LoadingAnimation() {
     return (
       <div className="flex items-center justify-center">
@@ -183,84 +264,85 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
       </div>
     );
   }
-    return (
-      <>
-        <Dialog open={open} onOpenChange={onClose}>
-          <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
-            <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
-              <DialogTitle className="text-lg font-semibold">Chat</DialogTitle>
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
-            </DialogHeader>
-          
-            <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
-              <div className="space-y-4 py-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[80%] p-4 rounded-2xl ${
-                        message.role === 'user'
-                          ? 'bg-white text-gray-900'
-                          : 'bg-white text-gray-900'
-                      } shadow-sm`}
-                    >
-                      {message.content}
-                    </div>
-                  </div>
-                ))}
-                {(isLoading || isSummarizing) && (
-                  <div className="flex justify-center items-center py-4">
-                    <LoadingAnimation />
-                    {isSummarizing && (
-                      <div className="text-sm text-gray-500 mt-2">
-                        Generating summary...
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-  
-            <div className="p-4 space-y-2">
-              <Button
-                onClick={handleConvertToNote}
-                variant="ghost"
-                className="w-full text-gray-500 hover:text-gray-700 flex items-center gap-2 h-10"
-                disabled={isSummarizing}
-              >
-                <span className="text-sm">
-                  {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
-                </span>
-              </Button>
-              
-              <div className="flex items-center gap-2 bg-white rounded-full p-2 shadow-sm">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Talk to me..."
-                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                  disabled={isSummarizing}
-                />
-                <Button
-                  onClick={handleSend}
-                  disabled={isLoading || isSummarizing}
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700"
+   
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
+          <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
+            <DialogTitle className="text-lg font-semibold">Chat</DialogTitle>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogHeader>
+        
+          <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
+            <div className="space-y-4 py-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
                 >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+                  <div
+                    className={`max-w-[80%] p-4 rounded-2xl ${
+                      message.role === 'user'
+                        ? 'bg-white text-gray-900'
+                        : 'bg-white text-gray-900'
+                    } shadow-sm`}
+                  >
+                    {message.content}
+                  </div>
+                </div>
+              ))}
+              {(isLoading || isSummarizing) && (
+                <div className="flex justify-center items-center py-4">
+                  <LoadingAnimation />
+                  {isSummarizing && (
+                    <div className="text-sm text-gray-500 mt-2">
+                      Generating summary...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </DialogContent>
-        </Dialog>
-
+          </ScrollArea>
+ 
+          <div className="p-4 space-y-2">
+            <Button
+              onClick={handleConvertToNote}
+              variant="ghost"
+              className="w-full text-gray-500 hover:text-gray-700 flex items-center gap-2 h-10"
+              disabled={isSummarizing}
+            >
+              <span className="text-sm">
+                {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
+              </span>
+            </Button>
+            
+            <div className="flex items-center gap-2 bg-white rounded-full p-2 shadow-sm">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Talk to me..."
+                className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                disabled={isSummarizing}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={isLoading || isSummarizing}
+                size="icon"
+                className="h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+ 
       {/* メモ編集用のダイアログ */}
       <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
@@ -277,7 +359,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                 placeholder="Note title..."
               />
             </div>
-
+ 
             <div className="grid gap-2">
               <label className="text-sm font-medium">Content</label>
               <Textarea
@@ -287,23 +369,51 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                 className="min-h-[200px]"
               />
             </div>
-
+ 
             <div className="grid gap-2">
               <label className="text-sm font-medium">Category</label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id} className="flex justify-between items-center">
+                          <span>{cat.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ml-2 h-6 w-6"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              startEditingCategory(cat);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    setEditingCategory(null);
+                    setNewCategoryName("");
+                    setIsNewCategoryDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-
+ 
             <div className="grid gap-2">
               <label className="text-sm font-medium">Importance (1-5)</label>
               <input
@@ -318,7 +428,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                 {importance}
               </div>
             </div>
-
+ 
             <div className="grid gap-2">
               <label className="text-sm font-medium">Related Memos</label>
               {relatedMemos.length > 0 && (
@@ -356,7 +466,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
               </Select>
             </div>
           </div>
-
+ 
           <div className="flex justify-end space-x-2">
             <Button variant="outline" onClick={() => setIsNoteDialogOpen(false)}>
               Cancel
@@ -367,6 +477,61 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
           </div>
         </DialogContent>
       </Dialog>
+ 
+      {/* Category Creation/Edit Dialog */}
+      <Dialog 
+        open={isNewCategoryDialogOpen} 
+        onOpenChange={(open) => {
+          setIsNewCategoryDialogOpen(open);
+          if (!open) {
+            setEditingCategory(null);
+            setNewCategoryName("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? 'Edit Category' : 'Create New Category'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">
+                Category Name <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                placeholder="Enter category name..."
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+            </div>
+          </div>
+ 
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsNewCategoryDialogOpen(false);
+                setEditingCategory(null);
+                setNewCategoryName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
+              disabled={isCreatingCategory || !newCategoryName.trim()}
+            >
+              {isCreatingCategory 
+                ? (editingCategory ? 'Updating...' : 'Creating...') 
+                : (editingCategory ? 'Update' : 'Create')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
-}
+ }

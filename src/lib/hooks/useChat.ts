@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ChatMessage } from '@/types/chat';
+import { useAuth } from '@/lib/hooks/useAuth';  // useAuthをインポート
 
 interface NotePreview {
   title: string;
@@ -12,20 +13,50 @@ interface NoteData {
   content: string;
   category_id: string;
   importance: number;
-  relatedMemos?: string[]; 
+  relatedMemos?: string[];
+  user_id?: string;  // user_idを追加
 }
 
 export const useChat = () => {
+  const { user } = useAuth();  // useAuthを使用
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [notePreview, setNotePreview] = useState<NotePreview | null>(null); 
+  const [notePreview, setNotePreview] = useState<NotePreview | null>(null);
+
+  // カテゴリ作成関連の関数を追加
+  const createCategory = async (categoryName: string) => {
+    if (!user || !categoryName.trim()) {
+      throw new Error('User not authenticated or invalid category name');
+    }
+
+    try {
+      const { data: newCategory, error } = await supabase
+        .from('categories')
+        .insert({
+          name: categoryName.trim(),
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return newCategory;
+    } catch (error) {
+      console.error('Error creating category:', error);
+      throw error;
+    }
+  };
 
   const fetchMessages = async () => {
+    if (!user) return;  // ユーザーが未認証の場合は早期リターン
+
     try {
       console.log('Fetching messages from Supabase...');
       const { data, error } = await supabase
         .from('chat_messages')
         .select('*')
+        .eq('user_id', user.id)  // ユーザーのメッセージのみを取得
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -37,6 +68,8 @@ export const useChat = () => {
   };
 
   const sendMessage = async (content: string): Promise<void> => {
+    if (!user) throw new Error('User not authenticated');  // ユーザー認証チェック
+
     console.log('2. sendMessage開始');
     setIsLoading(true);
 
@@ -44,29 +77,32 @@ export const useChat = () => {
       // 1. ユーザーメッセージをSupabaseに保存
       const { error: userError } = await supabase
         .from('chat_messages')
-        .insert([{ role: 'user', content: content.trim() }]);
+        .insert([{
+          role: 'user',
+          content: content.trim(),
+          user_id: user.id  // ユーザーIDを追加
+        }]);
 
       if (userError) throw userError;
 
-      // 2. ChatGPT APIを呼び出し
+      // 2. ChatGPT APIを呼び出し（変更なし）
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: content.trim() }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API call failed: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`API call failed: ${response.status}`);
       const data = await response.json();
 
       // 3. AIの応答をSupabaseに保存
       const { error: assistantError } = await supabase
         .from('chat_messages')
-        .insert([{ role: 'assistant', content: data.answer }]);
+        .insert([{
+          role: 'assistant',
+          content: data.answer,
+          user_id: user.id  // ユーザーIDを追加
+        }]);
 
       if (assistantError) throw assistantError;
 
@@ -80,7 +116,6 @@ export const useChat = () => {
       setIsLoading(false);
     }
   };
-
 
   // Step 1: 要約とタイトルの生成
   const generateNotePreview = async () => {
@@ -142,9 +177,19 @@ export const useChat = () => {
     }
   };
 
+  // メモの保存処理
   // Step 2: メモの保存
   const saveNote = async (noteData: NoteData) => {
+    if (!user) throw new Error('User not authenticated');
+
     try {
+      // カテゴリIDが "new_category:名前" の形式の場合、新しいカテゴリを作成
+      if (noteData.category_id.startsWith('new_category:')) {
+        const newCategoryName = noteData.category_id.split(':')[1];
+        const newCategory = await createCategory(newCategoryName);
+        noteData.category_id = newCategory.id;
+      }
+
       // 1. メモの基本情報を保存
       const { data: newMemo, error: memoError } = await supabase
         .from('memories')
@@ -153,41 +198,52 @@ export const useChat = () => {
           content: noteData.content,
           category_id: noteData.category_id,
           importance: noteData.importance,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          user_id: user.id
         }])
         .select()
         .single();
-  
+
       if (memoError) {
         console.error('Memo save error:', memoError);
         throw memoError;
       }
-  
+
       // 2. 関連メモの関係を保存（双方向）
       if (noteData.relatedMemos && noteData.relatedMemos.length > 0) {
-        const relations = noteData.relatedMemos.flatMap(targetId => [
-          {
-            source_memo_id: newMemo.id,
-            target_memo_id: targetId
-          },
-          // 逆方向の関係も作成
-          {
-            source_memo_id: targetId,
-            target_memo_id: newMemo.id
-          }
-        ]);
-  
-        const { error: relationsError } = await supabase
-          .from('memory_relations')
-          .insert(relations);
-  
-        if (relationsError) {
-          console.error('Relations save error:', relationsError);
-          throw relationsError;
+        // まず、関連メモが現在のユーザーのものかを確認
+        const { data: userMemos, error: userMemosError } = await supabase
+          .from('memories')
+          .select('id')
+          .eq('user_id', user.id)
+          .in('id', noteData.relatedMemos);
+
+        if (userMemosError) throw userMemosError;
+
+        // ユーザーの所有するメモIDのみを抽出
+        const validRelatedMemoIds = userMemos.map(memo => memo.id);
+
+        // 有効な関連メモがある場合のみ関係を作成
+        if (validRelatedMemoIds.length > 0) {
+          const relations = validRelatedMemoIds.flatMap(targetId => [
+            {
+              source_memo_id: newMemo.id,
+              target_memo_id: targetId
+            },
+            {
+              source_memo_id: targetId,
+              target_memo_id: newMemo.id
+            }
+          ]);
+
+          const { error: relationsError } = await supabase
+            .from('memory_relations')
+            .insert(relations);
+
+          if (relationsError) throw relationsError;
         }
       }
-  
-      // プレビューをクリア
+
       setNotePreview(null);
       
       return {
@@ -204,8 +260,10 @@ export const useChat = () => {
   };
 
   useEffect(() => {
-    fetchMessages();
-  }, []);
+    if (user) {
+      fetchMessages();
+    }
+  }, [user]);
 
   return {
     messages,
@@ -214,5 +272,6 @@ export const useChat = () => {
     notePreview,
     generateNotePreview,
     saveNote,
+    createCategory,  // createCategory関数をエクスポート
   };
 };

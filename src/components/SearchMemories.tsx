@@ -2,16 +2,16 @@
 import { useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { useMemorySearch } from "@/lib/hooks/useMemorySearch"
+import { Memory } from '@/types'
 
 interface SearchMemoriesProps {
-  memories: any[]
-  onSearchResults: (results: any[]) => void
+  memories: Memory[]
+  onSearchResults: (results: Memory[]) => void
 }
 
 export const SearchMemories = ({ memories, onSearchResults }: SearchMemoriesProps) => {
   const { searchQuery, setSearchQuery, searchResults } = useMemorySearch(memories)
 
-  // 検索結果を親コンポーネントに渡す
   useEffect(() => {
     onSearchResults(searchResults)
   }, [searchResults, onSearchResults])

@@ -20,26 +20,13 @@ import { MemoDialog } from '@/components/MemoDialog'
 import { AuthForm } from "@/components/auth/AuthForm"
 import { UserMenu } from "@/components/auth/UserMenu"
 import { useAuth } from "../lib/hooks/useAuth"
+import { Memory } from '@/types'
 
 // Supabaseクライアントの初期化
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "null",
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "null"
 )
-
-interface Memory {
-  id: string
-  title: string
-  content: string
-  created_at: string
-  category_id: string
-  importance: number
-  categories: {
-    id: string
-    name: string
-  }
-  relatedMemos: string[]
-}
 
 interface MemoryRelation {
   source_memo_id: string;
@@ -59,24 +46,29 @@ export default function Component() {
   const [filteredMemories, setFilteredMemories] = useState<Memory[]>([]);
   
   
-  // メモリーの取得
+  // メモリーの取得を認証状態に依存させる
   useEffect(() => {
-    fetchMemories()
-  }, [])
+    if (user) {  // ユーザーが認証されている場合のみデータを取得
+      fetchMemories()
+    }
+  }, [user])  // userを依存配列に追加
 
   const fetchMemories = async () => {
     try {
+      if (!user) return  // ユーザーが未認証の場合は早期リターン
+
       // メモとカテゴリ情報を取得
       const { data: memoriesData, error: memoriesError } = await supabase
-        .from('memories')
-        .select(`
-          *,
-          categories (
-            id,
-            name
-          )
-        `)
-        .order('created_at', { ascending: false })
+      .from('memories')
+      .select(`
+        *,
+        categories (
+          id,
+          name
+        )
+      `)
+      .eq('user_id', user.id)      // 現在のユーザーのデータのみを取得
+      .order('created_at', { ascending: false })
   
       if (memoriesError) throw memoriesError
   
@@ -100,11 +92,11 @@ export default function Component() {
         ...memo,
         relatedMemos: relationsData
           .filter(rel => rel.source_memo_id === memo.id)
-          .map(rel => rel.target_memo_id) // 関連メモのIDのみ抽出
-      }));
+          .map(rel => rel.target_memo_id)
+      }))
   
       setMemories(memoriesWithRelations)
-      setFilteredMemories(memoriesWithRelations) // 初期状態では全てのメモを表示
+      setFilteredMemories(memoriesWithRelations)
     } catch (error) {
       console.error('Error fetching memories:', error)
     } finally {
@@ -128,8 +120,10 @@ export default function Component() {
     category_id: string
     importance: number
     relatedMemos?: string[]
+    user_id?: string  // オプショナルとして追加
   }) => {
     try {
+      if (!user) return  // ユーザーが未認証の場合は早期リターン
       setIsLoading(true)
 
       // 1. タイトルの生成
@@ -147,7 +141,7 @@ export default function Component() {
 
       const { title } = await titleResponse.json()
 
-      // 2. メモの保存
+      // 2. メモの保存 - user_idを追加
       const { data: newMemo, error: memoError } = await supabase
         .from('memories')
         .insert([
@@ -157,6 +151,7 @@ export default function Component() {
             category_id: memoData.category_id,
             importance: memoData.importance,
             created_at: new Date().toISOString(),
+            user_id: user.id  // ユーザーIDを追加
           }
         ])
         .select()

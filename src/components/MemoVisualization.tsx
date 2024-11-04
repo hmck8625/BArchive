@@ -1,10 +1,12 @@
+// src/components/MemoVisualization.tsx
 'use client'
-
+import { motion, AnimatePresence } from 'framer-motion'
 import React, { useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/lib/hooks/useAuth'
 import * as d3 from 'd3'
 import { createClient } from '@supabase/supabase-js'
 import { Button } from "@/components/ui/button"
-import { ZoomIn, ZoomOut, Maximize2, Move } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize2, Move, X, Pencil } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -16,6 +18,9 @@ import {
   Slider
 } from '@/components/ui/slider'
 import { EditMemoDialog } from '@/components/EditMemoDialog'
+import { Memory, Category } from '@/types'
+
+interface MemoNode extends d3.SimulationNodeDatum, Memory {}
 
 // Supabaseクライアントの初期化
 const supabase = createClient(
@@ -23,34 +28,13 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// D3のSimulationNodeDatumを拡張
-interface MemoNode extends d3.SimulationNodeDatum {
-  id: string
-  title: string
-  content: string
-  importance: number
-  created_at: string
-  category_id: string
-  categories: {
-    id: string
-    name: string
-  }
-  relatedMemos: string[]
-  x?: number
-  y?: number
-}
-
-interface Category {
-  id: string
-  name: string
-}
-
 interface LinkDatum extends d3.SimulationLinkDatum<MemoNode> {
   source: string | MemoNode
   target: string | MemoNode
 }
 
 export default function MemoVisualization() {
+  const { user } = useAuth()  // 追加
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedNode, setSelectedNode] = useState<MemoNode | null>(null)
   const [memos, setMemos] = useState<MemoNode[]>([])
@@ -64,15 +48,20 @@ export default function MemoVisualization() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!user) return  // ユーザーが未認証の場合は早期リターン
+
       try {
+        // カテゴリーの取得
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
           .select('id, name')
           .order('name')
+          // RLSが有効なため、user_idによるフィルタリングは不要
 
         if (categoriesError) throw categoriesError
         setCategories(categoriesData || [])
 
+        // メモの取得
         const { data: memosData, error: memosError } = await supabase
           .from('memories')
           .select(`
@@ -82,15 +71,19 @@ export default function MemoVisualization() {
             importance,
             created_at,
             category_id,
+            user_id,
             categories (
               id,
               name
             )
           `)
+          .eq('user_id', user.id)      // 現在のユーザーのデータのみを取得
           .order('created_at', { ascending: false })
+          // RLSが有効なため、user_idによるフィルタリングは不要
 
         if (memosError) throw memosError
 
+        // 関連メモの取得
         const { data: relationsData, error: relationsError } = await supabase
           .from('memory_relations')
           .select('source_memo_id, target_memo_id')
@@ -98,12 +91,31 @@ export default function MemoVisualization() {
         if (relationsError) throw relationsError
 
         const memosWithRelations = memosData.map(memo => {
+          // memo.categories[0] が null の場合のフォールバック
+          const category = memo.categories[0] || { 
+            id: 'uncategorized', 
+            name: 'Uncategorized' 
+          }
+          
           const typedMemo: MemoNode = {
-            ...memo,
-            categories: memo.categories[0], // 配列の最初の要素を取得
+            id: memo.id,
+            title: memo.title,
+            content: memo.content,
+            importance: memo.importance,
+            created_at: memo.created_at,
+            category_id: memo.category_id,
+            user_id: memo.user_id, // user_idを明示的に含める
+            categories: category,
             relatedMemos: relationsData
               .filter(rel => rel.source_memo_id === memo.id)
-              .map(rel => rel.target_memo_id)
+              .map(rel => rel.target_memo_id),
+            // シミュレーションのための座標プロパティ
+            x: undefined,
+            y: undefined,
+            vx: undefined,
+            vy: undefined,
+            fx: null,
+            fy: null,
           }
           return typedMemo
         })
@@ -117,9 +129,12 @@ export default function MemoVisualization() {
     }
 
     fetchData()
-  }, [])
+  }, [user])  // userを依存配列に追加
+
 
   const handleMemoUpdate = async () => {
+    if (!user) return false
+
     try {
       const { data: memosData, error: memosError } = await supabase
         .from('memories')
@@ -130,11 +145,13 @@ export default function MemoVisualization() {
           importance,
           created_at,
           category_id,
+          user_id,
           categories (
             id,
             name
           )
         `)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
       if (memosError) throw memosError
@@ -147,15 +164,26 @@ export default function MemoVisualization() {
 
       const updatedMemosWithRelations = memosData.map(memo => {
         const typedMemo: MemoNode = {
-          ...memo,
-          categories: memo.categories[0], // 配列の最初の要素を取得
+          id: memo.id,
+          title: memo.title,
+          content: memo.content,
+          importance: memo.importance,
+          created_at: memo.created_at,
+          category_id: memo.category_id,
+          user_id: memo.user_id,
+          categories: memo.categories[0],
           relatedMemos: relationsData
             .filter(rel => rel.source_memo_id === memo.id)
-            .map(rel => rel.target_memo_id)
+            .map(rel => rel.target_memo_id),
+          x: undefined,
+          y: undefined,
+          vx: undefined,
+          vy: undefined,
+          fx: null,
+          fy: null,
         }
         return typedMemo
       })
-      
 
       setMemos(updatedMemosWithRelations)
       return true
@@ -203,7 +231,7 @@ export default function MemoVisualization() {
         .strength(-120)
         .distanceMax(200))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(25))
+      .force('collision', d3.forceCollide().radius(5))
       .alphaDecay(0.01)
 
     const link = g.append('g')
@@ -222,18 +250,35 @@ export default function MemoVisualization() {
       .join('g')
 
     nodes.append('circle')
-      .attr('r', d => Math.min((d.importance || 1) * 2.5, 15))
+      .attr('r', d => Math.min((d.importance || 1) * 5, 100))
       .attr('fill', d => categoryColorScale(d.category_id))
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
 
+    // ノードのテキスト部分
     nodes.append('text')
-      .text(d => d.title.length > 10 ? d.title.slice(0, 10) + '...' : d.title)
-      .attr('dy', -15)
       .attr('text-anchor', 'middle')
-      .attr('font-size', '10px')
+      .attr('font-size', '6px')
       .attr('fill', '#333')
-      .attr('pointer-events', 'none')
+      .each(function(d) {
+        const text = d3.select(this);
+        const maxLength = 12;  // 1行の最大文字数
+        
+        // 1行目
+        text.append('tspan')
+          .attr('x', 0)
+          .attr('dy', '-1.2em')  // 上方向への位置調整
+          .text(d.title.slice(0, maxLength));
+        
+        // 2行目
+        if (d.title.length > maxLength) {
+          text.append('tspan')
+            .attr('x', 0)
+            .attr('dy', '1.2em')  // 行間隔
+            .text(d.title.slice(maxLength, maxLength * 2) + 
+                  (d.title.length > maxLength * 2 ? '...' : ''));
+        }
+      });
 
     const zoom = d3.zoom()
       .scaleExtent([0.2, 3])
@@ -332,7 +377,7 @@ export default function MemoVisualization() {
     const bounds = (g.node() as SVGGElement).getBBox()
     const width = parseInt(svg.attr('width'))
     const height = parseInt(svg.attr('height'))
-    const scale = 0.9 / Math.max(bounds.width / width, bounds.height / height)
+    const scale = 0.95 / Math.max(bounds.width / width, bounds.height / height)
     const translateX = (width - scale * (bounds.x * 2 + bounds.width)) / 2
     const translateY = (height - scale * (bounds.y * 2 + bounds.height)) / 2
 
@@ -345,83 +390,133 @@ export default function MemoVisualization() {
 
   return (
     <div className="w-full h-screen relative">
-      <div className="absolute top-4 left-4 right-4 z-10 flex flex-col gap-2 bg-white/90 p-2 rounded-lg shadow-lg">
-        <div className="flex gap-2">
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(category => (
-                <SelectItem key={category.id} value={category.id}>
-                  {category.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="secondary" size="icon" onClick={handleFitView}>
-            <Maximize2 className="h-4 w-4" />
-          </Button>
+      {!user ? (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-lg text-gray-600">
+            Please log in to view memory visualization.
+          </p>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Move className="h-4 w-4" />
-          <div className="flex-grow">
-            <Slider
-              value={[nodeDistance]}
-              onValueChange={([value]) => setNodeDistance(value)}
-              min={50}
-              max={200}
-              step={10}
-              className="w-full"
-            />
+      ) : (
+        <>
+          {/* 既存のUI要素 */}
+          <div className="absolute top-4 left-4 right-4 z-10 flex flex-col gap-2 bg-white/90 p-4 rounded-lg shadow-lg">
+            <div className="flex gap-2">
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map(category => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="secondary" size="icon" onClick={handleFitView}>
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Move className="h-4 w-4" />
+              <div className="flex-grow">
+                <Slider
+                  value={[nodeDistance]}
+                  onValueChange={([value]) => setNodeDistance(value)}
+                  min={50}
+                  max={200}
+                  step={10}
+                  className="w-full"
+                />
+              </div>
+            </div>
           </div>
+  
+          <svg ref={svgRef} className="w-full h-full bg-gray-50"></svg>
+  
+{/* モバイル向け詳細表示（修正版） */}
+<AnimatePresence>
+  {selectedNode && (
+    <motion.div
+      initial={{ y: "100%" }}
+      animate={{ y: 0 }}
+      exit={{ y: "100%" }}
+      transition={{ type: "spring", damping: 25, stiffness: 500 }}
+      className="fixed bottom-0 left-0 right-0 bg-white shadow-lg rounded-t-2xl h-[60vh] flex flex-col"
+    >
+      {/* ヘッダー部分 */}
+      <div className="flex-none p-4 border-b bg-white">
+        <div className="relative mb-8">
+          {/* ボタン類を最前面に */}
+          <div className="absolute right-0 top-0 z-10 flex flex-col gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSelectedNode(null)}
+              aria-label="Close details"
+              className="h-6 w-6"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            
+            <Button 
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsEditDialogOpen(true)}
+              className="h-6 w-6"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* タイトルをスクロール可能なコンテナで囲む */}
+          <div className="max-h-24 overflow-y-auto pr-12">
+            <h2 className="text-xl font-bold">{selectedNode.title}</h2>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-sm">
+          <span className="text-gray-600">
+            {new Date(selectedNode.created_at).toLocaleString()}
+          </span>
+          <span 
+            className="font-medium" 
+            style={{ color: categoryColorScale(selectedNode.category_id) }}
+          >
+            {selectedNode.categories?.name}
+          </span>
+          <span className="bg-blue-100 px-2 py-1 rounded-full">
+            Importance: {selectedNode.importance}
+          </span>
         </div>
       </div>
 
-      <svg ref={svgRef} className="w-full h-full bg-gray-50"></svg>
-
-      {/* モバイル向け詳細表示 */}
-      {selectedNode && (
-        <div className="absolute bottom-0 left-0 right-0 bg-white/95 p-4 shadow-lg rounded-t-lg max-h-[50vh] overflow-y-auto">
-          <div className="flex justify-between items-start mb-2">
-            <div>
-              <h2 className="text-lg font-bold">{selectedNode.title}</h2>
-              <p className="text-xs text-gray-600">
-                {new Date(selectedNode.created_at).toLocaleString()}
-              </p>
-              <p className="text-xs" style={{ color: categoryColorScale(selectedNode.category_id) }}>
-                {selectedNode.categories?.name}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <p className="text-xs bg-blue-100 px-2 py-1 rounded">
-                Importance: {selectedNode.importance}
-              </p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setIsEditDialogOpen(true)}
-              >
-                Edit
-              </Button>
-            </div>
-          </div>
-          <p className="text-sm">{selectedNode.content}</p>
+      {/* コンテンツ部分 */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4">
+          <p className="text-base leading-relaxed whitespace-pre-wrap">
+            {selectedNode.content}
+          </p>
         </div>
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
+  
+          <EditMemoDialog
+            memo={selectedNode}
+            open={isEditDialogOpen}
+            onOpenChange={setIsEditDialogOpen}
+            onSave={async () => {
+              const result = await handleMemoUpdate()
+              if (result) setIsEditDialogOpen(false)
+            }}
+            supabase={supabase}
+          />
+        </>
       )}
-
-      <EditMemoDialog
-        memo={selectedNode}
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        onSave={async () => {
-          const result = await handleMemoUpdate()
-          if (result) setIsEditDialogOpen(false)
-        }}
-        supabase={supabase}
-      />
     </div>
-  )
+  ); 
 }
