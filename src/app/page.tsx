@@ -17,6 +17,10 @@ import { MemoriesSection } from '@/components/MemoriesSection'
 import MemoVisualization from '@/components/MemoVisualization'
 import { MemoDialog } from '@/components/MemoDialog'
 
+import { AuthForm } from "@/components/auth/AuthForm"
+import { UserMenu } from "@/components/auth/UserMenu"
+import { useAuth } from "../lib/hooks/useAuth"
+
 // Supabaseクライアントの初期化
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "null",
@@ -45,6 +49,7 @@ interface MemoryRelation {
 }
 
 export default function Component() {
+  const { user, loading: authLoading } = useAuth()
   const [isMemoOpen, setIsMemoOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -203,6 +208,15 @@ export default function Component() {
     }
   }
 
+  // ログインしていない場合は認証画面を表示
+  if (!authLoading && !user) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center">
+        <AuthForm />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] relative">
       <div className="p-4 pb-20">
@@ -216,9 +230,7 @@ export default function Component() {
             <Library className="mr-2 h-4 w-4" />
             Archive
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <User className="h-5 w-5" />
-          </Button>
+          <UserMenu email={user?.email} />
         </div>
   
         {/* Main Content */}
