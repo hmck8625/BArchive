@@ -35,6 +35,18 @@ interface MemoryRelation {
   // 例: created_at: string;
 }
 
+// Add viewport meta tag to the head
+if (typeof document !== 'undefined') {
+  let viewportMeta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement;
+  if (!viewportMeta) {
+    viewportMeta = document.createElement('meta');
+    viewportMeta.setAttribute('name', 'viewport');
+    document.head.appendChild(viewportMeta);
+  }
+  viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+}
+
+
 export default function Component() {
   const { user, loading: authLoading } = useAuth()
   const [isMemoOpen, setIsMemoOpen] = useState(false)
@@ -44,6 +56,51 @@ export default function Component() {
 
   const [memories, setMemories] = useState<Memory[]>([]);
   const [filteredMemories, setFilteredMemories] = useState<Memory[]>([]);
+
+  // Add effect to prevent browser chrome hiding
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Force the viewport to maintain its size
+      document.documentElement.style.height = '100vh';
+      document.body.style.height = '100vh';
+      
+      // Prevent pull-to-refresh
+      document.body.style.overscrollBehavior = 'none';
+      
+      // Fix for input zoom
+      const style = document.createElement('style');
+      style.textContent = `
+        input[type="text"],
+        input[type="number"],
+        input[type="email"],
+        input[type="password"],
+        input[type="search"],
+        input[type="tel"],
+        input[type="url"],
+        textarea {
+          font-size: 16px !important;
+          -webkit-text-size-adjust: 100%;
+        }
+        
+        /* Fix for iOS bottom nav bar */
+        .bottom-nav-fixed {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: white;
+          padding-bottom: env(safe-area-inset-bottom);
+          z-index: 50;
+        }
+        
+        /* Add padding to main content to prevent overlap with fixed nav */
+        .main-content-wrapper {
+          padding-bottom: calc(env(safe-area-inset-bottom) + 4rem);
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
   
   
   // メモリーの取得を認証状態に依存させる
@@ -214,7 +271,7 @@ export default function Component() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] relative">
-      <div className="p-4 pb-20">
+      <div className="p-4 main-content-wrapper">
         {/* Top Navigation */}
         <div className="flex justify-between items-center mb-8">
           <Button 
@@ -262,8 +319,8 @@ export default function Component() {
         </div>
       </div>
   
-      {/* Fixed Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-2 flex justify-around">
+      {/* Bottom Navigation with updated className */}
+      <div className="bottom-nav-fixed border-t border-gray-200 p-2 flex justify-around bg-white">
         <Button variant="ghost" size="sm" onClick={() => setIsMemoOpen(true)}>
           <PenLine className="h-4 w-4 mr-1" />
           Memo
