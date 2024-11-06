@@ -65,8 +65,64 @@ body {
 @layer base {
   * {
     @apply border-border;
+    /* タッチアクション最適化 */
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground;
+    /* オーバースクロール制御 */
+    overscroll-behavior-y: none;
+    /* iOS momentum scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* フォント設定 */
+    font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   }
+}
+
+/* モバイル入力フォーム最適化 */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+textarea {
+  font-size: 16px !important;
+  -webkit-text-size-adjust: none;
+  @apply appearance-none;
+}
+
+/* 下部ナビゲーション固定 */
+.bottom-nav-fixed {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  /* iOSのセーフエリア対応 */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  /* シャドウ追加でナビゲーションを目立たせる */
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* メインコンテンツのパディング調整 */
+.main-content-wrapper {
+  /* 下部ナビゲーションの高さ + セーフエリア分のパディング */
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  /* 動的ビューポート高さ使用 */
+  min-height: 100dvh;
+}
+
+/* 横スクロール防止 */
+.prevent-horizontal-scroll {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* スクロールバーのカスタマイズ */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
 }
