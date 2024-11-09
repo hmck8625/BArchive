@@ -136,7 +136,7 @@ export default function Component() {
               whileInView={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
             >
-              <p className="mb-4">"{testimonial.comment}"</p>
+              <p className="mb-4">&ldquo;{testimonial.comment}&rdquo;</p>
               <p className="text-right text-gray-400">- {testimonial.name}</p>
             </motion.div>
           ))}
