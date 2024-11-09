@@ -14,7 +14,7 @@ import {
 import { Library, MessageCircle, PenLine, User } from "lucide-react"
 import { createClient } from '@supabase/supabase-js'
 import { MemoriesSection } from '@/components/MemoriesSection'
-import MemoVisualization from '@/components/MemoVisualization'
+import MemoVisualization, { MemoVisualizationProps } from '@/components/MemoVisualization'
 import { MemoDialog } from '@/components/MemoDialog'
 
 import { AuthForm } from "@/components/auth/AuthForm"
@@ -117,17 +117,24 @@ export default function Component() {
     setFilteredMemories(results);
   }, []);
 
+  // ダイアログを閉じる際のハンドラー関数を作成
+  const handleVisualizationClose = useCallback(() => {
+    setIsVisualizationOpen(false);
+    fetchMemories();
+  }, [fetchMemories]);
+
+
   const handleMemoSave = async (memoData: {
     content: string
     category_id: string
     importance: number
     relatedMemos?: string[]
-    user_id?: string  // オプショナルとして追加
+    user_id?: string
   }) => {
     try {
-      if (!user) return  // ユーザーが未認証の場合は早期リターン
+      if (!user) return
       setIsLoading(true)
-
+  
       // 1. タイトルの生成
       const titleResponse = await fetch('/api/generate-title', {
         method: 'POST',
@@ -136,14 +143,14 @@ export default function Component() {
         },
         body: JSON.stringify({ content: memoData.content }),
       })
-
+  
       if (!titleResponse.ok) {
         throw new Error('Failed to generate title')
       }
-
+  
       const { title } = await titleResponse.json()
-
-      // 2. メモの保存 - user_idを追加
+  
+      // 2. メモの保存
       const { data: newMemo, error: memoError } = await supabase
         .from('memories')
         .insert([
@@ -153,46 +160,45 @@ export default function Component() {
             category_id: memoData.category_id,
             importance: memoData.importance,
             created_at: new Date().toISOString(),
-            user_id: user.id  // ユーザーIDを追加
+            user_id: user.id
           }
         ])
         .select()
         .single()
-
+  
       if (memoError) {
         console.error('Memo save error:', memoError)
         throw memoError
       }
-
+  
       // 3. 関連メモの関係を保存
       if (memoData.relatedMemos && memoData.relatedMemos.length > 0) {
-        // 双方向の関係を作成
         const relations = memoData.relatedMemos.flatMap(targetId => [
           {
             source_memo_id: newMemo.id,
             target_memo_id: targetId
           },
-          // 逆方向の関係も作成（双方向リンク）
           {
             source_memo_id: targetId,
             target_memo_id: newMemo.id
           }
         ])
-
+  
         const { error: relationsError } = await supabase
           .from('memory_relations')
           .insert(relations)
-
+  
         if (relationsError) {
           console.error('Relations save error:', relationsError)
           throw relationsError
         }
       }
-
+  
       // 4. 成功時の処理
       setIsMemoOpen(false)
-      fetchMemories()
-
+      fetchMemories()  // メインのタイムラインを更新
+      handleMemoryUpdate()  // メモリー更新コールバックを呼び出し（可視化の更新用）
+  
     } catch (error) {
       console.error('Error saving memory:', error)
       if (error instanceof Error) {
@@ -287,13 +293,24 @@ export default function Component() {
       />
 
       {/* Visualization Dialog */}
-      <Dialog open={isVisualizationOpen} onOpenChange={setIsVisualizationOpen}>
+      <Dialog 
+        open={isVisualizationOpen} 
+        onOpenChange={(open) => {
+          if (!open) {  // ダイアログが閉じられるときのみfetchMemoriesを実行
+            handleVisualizationClose();
+          } else {
+            setIsVisualizationOpen(true);
+          }
+        }}
+      >
         <DialogContent className="max-w-[90vw] h-[90vh]">
           <DialogHeader>
             <DialogTitle>Memory Visualization</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-hidden">
-            <MemoVisualization />
+          <MemoVisualization 
+             onMemoryUpdate={fetchMemories}  // fetchMemoriesを渡す
+          />
           </div>
         </DialogContent>
       </Dialog>
@@ -301,7 +318,10 @@ export default function Component() {
       {/* ChatWindow */}
       <ChatWindow
         open={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        onClose={() => {
+          setIsChatOpen(false);
+          fetchMemories(); // チャットウィンドウを閉じる際にメモリーを再取得
+        }}
       />
     </div>
   )

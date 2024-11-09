@@ -33,7 +33,12 @@ interface LinkDatum extends d3.SimulationLinkDatum<MemoNode> {
   target: string | MemoNode
 }
 
-export default function MemoVisualization() {
+// インターフェースをエクスポート
+export interface MemoVisualizationProps {
+  onMemoryUpdate?: () => Promise<void>;  // Promiseを返す非同期関数として定義
+}
+
+export default function MemoVisualization({ onMemoryUpdate }: MemoVisualizationProps) {
   const { user } = useAuth()  // 追加
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedNode, setSelectedNode] = useState<MemoNode | null>(null)
@@ -250,7 +255,7 @@ export default function MemoVisualization() {
       .join('g')
 
     nodes.append('circle')
-      .attr('r', d => Math.min((d.importance || 1) * 5, 100))
+      .attr('r', d => Math.min((d.importance || 1) * 1.005, 100))
       .attr('fill', d => categoryColorScale(d.category_id))
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
@@ -501,20 +506,43 @@ export default function MemoVisualization() {
           </p>
         </div>
       </div>
+
+      {/* EditMemoDialog を修正 */}
+      <EditMemoDialog
+        memo={selectedNode}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onSave={async () => {
+          const result = await handleMemoUpdate()
+          if (result) {
+            setIsEditDialogOpen(false)
+            const { data: updatedMemo } = await supabase
+              .from('memories')
+              .select(`
+                *,
+                categories (
+                  id,
+                  name
+                )
+              `)
+              .eq('id', selectedNode.id)
+              .single();
+            
+            if (updatedMemo) {
+              setSelectedNode(updatedMemo);
+            }
+            if (onMemoryUpdate) {
+              await onMemoryUpdate();  // await を追加
+            }
+          }
+        }}
+        supabase={supabase}
+        onMemoryUpdate={onMemoryUpdate}
+      />
     </motion.div>
   )}
 </AnimatePresence>
-  
-          <EditMemoDialog
-            memo={selectedNode}
-            open={isEditDialogOpen}
-            onOpenChange={setIsEditDialogOpen}
-            onSave={async () => {
-              const result = await handleMemoUpdate()
-              if (result) setIsEditDialogOpen(false)
-            }}
-            supabase={supabase}
-          />
+
         </>
       )}
     </div>

@@ -39,14 +39,15 @@ import { useAuth } from '@/lib/hooks/useAuth'  // useAuthをインポート
 import { Memory, Category, ExistingMemo} from '@/types'  // 共通の型をインポート
 
 interface EditMemoDialogProps {
-  memo: Memory | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSave: () => void
-  supabase: SupabaseClient
+  memo: Memory | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: () => void;
+  supabase: SupabaseClient;
+  onMemoryUpdate?: () => Promise<void>;  // 追加
 }
 
-export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase }: EditMemoDialogProps) {
+export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase, onMemoryUpdate}: EditMemoDialogProps) {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [categoryId, setCategoryId] = useState<string>("")

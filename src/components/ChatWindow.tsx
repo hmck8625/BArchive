@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef} from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo} from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,10 @@ import { createClient } from '@supabase/supabase-js'
 import { X, Plus, Pencil } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from '@/lib/hooks/useAuth';  // useAuthを追加
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneLight } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+
 import {
   Select,
   SelectContent,
@@ -40,8 +44,10 @@ interface ExistingMemo {
 export function ChatWindow({ open, onClose }: ChatWindowProps) {
   const { user } = useAuth();  // useAuthを使用
   const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { messages, isLoading, sendMessage, generateNotePreview, saveNote } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
   
   // メモ作成用の状態
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
@@ -92,6 +98,62 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
   }, [isNoteDialogOpen, user]);  // user を依存配列に追加
 
 
+    // モバイル端末の検出
+    useEffect(() => {
+      const checkMobile = () => {
+        setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+      };
+  
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+  
+    // 送信ボタンのハンドラー
+    const handleSend = useCallback(() => {
+      if (!inputRef.current) return;
+      const value = inputRef.current.value.trim();
+      if (!value) return;
+      
+      sendMessage(value);
+      inputRef.current.value = '';
+      // 必要に応じて高さをリセット
+      inputRef.current.style.height = 'auto';
+    }, [sendMessage]);
+    
+    // キー入力のハンドラー
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter') {
+        if (isMobile) {
+          // モバイルの場合は通常の改行として処理
+          return;
+        }
+        
+        if (e.shiftKey) {
+          // デスクトップでShift + Enterの場合は改行
+          return;
+        }
+        
+        // デスクトップでEnterのみの場合は送信
+        e.preventDefault();
+        handleSend();
+      }
+    };
+  
+
+    // 高さ調整は必要な場合のみ
+    const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
+      const textarea = e.currentTarget;
+      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight);
+      const lines = textarea.value.split('\n').length;
+      
+      // 単純な計算で高さを設定（パフォーマンス重視）
+      const newHeight = Math.min(lineHeight * lines, 200);
+      if (textarea.offsetHeight !== newHeight) {
+        textarea.style.height = `${newHeight}px`;
+      }
+    }, []);
+
   // カテゴリ更新ハンドラー
   const handleUpdateCategory = async () => {
     if (!user || !editingCategory || !newCategoryName.trim()) return;
@@ -126,6 +188,18 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
       setIsCreatingCategory(false);
     }
   };
+
+  // コンポーネントの先頭で追加
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // useEffectを追加
+  useEffect(() => {
+    if (isNoteDialogOpen && titleInputRef.current) {
+      // 入力フィールドのフォーカスを解除し、選択を解除
+      titleInputRef.current.blur();
+      titleInputRef.current.setSelectionRange(0, 0);
+    }
+  }, [isNoteDialogOpen]);
 
   // カテゴリ編集を開始する関数
   const startEditingCategory = (category: Category) => {
@@ -179,12 +253,6 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
     } finally {
       setIsSummarizing(false);
     }
-  };
-
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    await sendMessage(input.trim());
-    setInput('');
   };
 
   // メモの保存ハンドラー
@@ -264,17 +332,56 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
       </div>
     );
   }
+
+  // MessageContentコンポーネントの修正
+  const MessageContent = ({ content }: { content: string }) => {
+    return (
+      <ReactMarkdown
+        components={{
+          code({ node, className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || '');
+            const isInline = !match;
+            return isInline ? (
+              <code className={className} {...props}>
+                {children}
+              </code>
+            ) : (
+              <SyntaxHighlighter
+                style={oneLight}
+                language={match[1]}
+                PreTag="div"
+              >
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            );
+          },
+          p({ children }) {
+            return <p className="whitespace-pre-wrap mb-4">{children}</p>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    );
+  };
    
   return (
     <>
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
-          <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
-            <DialogTitle className="text-lg font-semibold">Chat</DialogTitle>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[500px] h-[95dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
+        <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
+          <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+            <span>Chat</span>
+            <Button
+              onClick={handleConvertToNote}
+              variant="ghost"
+              className="text-gray-500 hover:text-gray-700 flex items-center gap-2 h-8 text-sm"
+              disabled={isSummarizing}
+            >
+              {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
             </Button>
-          </DialogHeader>
+          </DialogTitle>
+        </DialogHeader>
         
           <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
             <div className="space-y-4 py-4">
@@ -292,10 +399,11 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                         : 'bg-white text-gray-900'
                     } shadow-sm`}
                   >
-                    {message.content}
+                    <MessageContent content={message.content} />
                   </div>
                 </div>
               ))}
+
               {(isLoading || isSummarizing) && (
                 <div className="flex justify-center items-center py-4">
                   <LoadingAnimation />
@@ -309,37 +417,38 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
             </div>
           </ScrollArea>
  
-          <div className="p-4 space-y-2">
-            <Button
-              onClick={handleConvertToNote}
-              variant="ghost"
-              className="w-full text-gray-500 hover:text-gray-700 flex items-center gap-2 h-10"
-              disabled={isSummarizing}
-            >
-              <span className="text-sm">
-                {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
-              </span>
-            </Button>
-            
-            <div className="flex items-center gap-2 bg-white rounded-full p-2 shadow-sm">
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Talk to me..."
-                className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                disabled={isSummarizing}
+
+          {/* 入力フォーム */}
+            <div className="p-4">
+              <div className="flex items-center gap-2 bg-white rounded-lg p-2 shadow-sm">
+              <textarea
+                ref={inputRef}
+                // value と onChange を削除
+                onInput={handleInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={isMobile ? "メッセージを入力..." : "メッセージを入力... (Shift + Enter で改行)"}
+                className="w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base min-h-[44px] max-h-[200px] resize-none overflow-y-auto"
+                style={{
+                  fontSize: '16px',
+                  lineHeight: '1.5',
+                  WebkitTextSizeAdjust: '100%',
+                }}
               />
-              <Button
-                onClick={handleSend}
-                disabled={isLoading || isSummarizing}
-                size="icon"
-                className="h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-700"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+                <Button
+                  onClick={handleSend}
+                  disabled={isLoading || isSummarizing}
+                  size="icon"
+                  className="h-8 w-8 shrink-0 rounded-full bg-purple-600 hover:bg-purple-700"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
  
