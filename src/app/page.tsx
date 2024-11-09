@@ -218,7 +218,7 @@ export default function Component() {
     <div className="min-h-screen bg-[#FAF9F6] relative">
       <div className="p-4 main-content-wrapper">
         {/* Top Navigation */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-8 mt-6"> {/* mt-6 を追加 */}
           <Button 
             variant="ghost" 
             className="bg-[#F3E5F5] text-purple-800 hover:bg-[#E1BEE7]"
