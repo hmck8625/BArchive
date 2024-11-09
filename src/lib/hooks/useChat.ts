@@ -8,6 +8,10 @@ interface NotePreview {
   content: string;
 }
 
+interface ChatOptions {
+  historySize?: number;  // 履歴の往復数（デフォルト3）
+}
+
 interface NoteData {
   title: string;
   content: string;
@@ -17,11 +21,17 @@ interface NoteData {
   user_id?: string;  // user_idを追加
 }
 
-export const useChat = () => {
+export const useChat = (options: ChatOptions = { historySize: 1 }) => {
   const { user } = useAuth();  // useAuthを使用
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notePreview, setNotePreview] = useState<NotePreview | null>(null);
+  const [historySize, setHistorySize] = useState(options.historySize || 3);
+
+  // historySize変更用の関数を追加
+  const updateHistorySize = (size: number) => {
+    setHistorySize(size);
+  };
 
   // カテゴリ作成関連の関数を追加
   const createCategory = async (categoryName: string) => {
@@ -74,6 +84,20 @@ export const useChat = () => {
     setIsLoading(true);
 
     try {
+    // デバッグログ追加
+        console.log('現在のメッセージ一覧:', messages);
+        
+        // 直近の6メッセージを取得
+        const messagesLimit = historySize * 2;
+        const recentMessages = messages.slice(-messagesLimit);
+        console.log(`直近${messagesLimit}メッセージ:`, recentMessages);
+
+        const formattedMessages = recentMessages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+        console.log('ChatGPTに送信するメッセージ履歴:', formattedMessages);
+
       // 1. ユーザーメッセージをSupabaseに保存
       const { error: userError } = await supabase
         .from('chat_messages')
@@ -85,11 +109,14 @@ export const useChat = () => {
 
       if (userError) throw userError;
 
-      // 2. ChatGPT APIを呼び出し（変更なし）
+      // 2. ChatGPT APIを呼び出し（contextを追加）
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content.trim() }),
+        body: JSON.stringify({ 
+          message: content.trim(),
+          context: recentMessages  // 会話履歴を追加
+        }),
       });
 
       if (!response.ok) throw new Error(`API call failed: ${response.status}`);
@@ -120,7 +147,7 @@ export const useChat = () => {
   // Step 1: 要約とタイトルの生成
   const generateNotePreview = async () => {
     try {
-      const lastMessages = messages.slice(-10);
+      const lastMessages = messages.slice(-10); // 要約するメッセージ数
       
       const conversationText = lastMessages
         .map(msg => `${msg.role}: ${msg.content}`)
@@ -300,5 +327,7 @@ export const useChat = () => {
     generateNotePreview,
     saveNote,
     createCategory,  // createCategory関数をエクスポート
+    historySize,          // 現在の履歴サイズを返す
+    updateHistorySize,    // 履歴サイズ更新関数を返す
   };
 };

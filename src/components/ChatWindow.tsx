@@ -1,3 +1,4 @@
+// app/components/ChatWindow.tsx
 import { useState, useEffect, useRef, useCallback, useMemo} from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,14 @@ import { useAuth } from '@/lib/hooks/useAuth';  // useAuthを追加
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { MessageSquare, Info } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Portal } from "@radix-ui/react-portal";
+
 
 import {
   Select,
@@ -42,10 +51,12 @@ interface ExistingMemo {
 }
 
 export function ChatWindow({ open, onClose }: ChatWindowProps) {
+  const MAX_CHARS = 200; // 最大文字数
+
   const { user } = useAuth();  // useAuthを使用
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { messages, isLoading, sendMessage, generateNotePreview, saveNote } = useChat();
+  const { messages, isLoading, sendMessage, generateNotePreview, saveNote, historySize, updateHistorySize } = useChat();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
   
@@ -65,6 +76,12 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
   const [isNewCategoryDialogOpen, setIsNewCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  // 履歴サイズ変更用のセレクトボックス
+  const handleHistorySizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newSize = parseInt(e.target.value);
+    updateHistorySize(newSize);
+  };
 
   // カテゴリーと既存メモのフェッチ
   useEffect(() => {
@@ -115,9 +132,8 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
       const value = inputRef.current.value.trim();
       if (!value) return;
       
-      sendMessage(value);
+      sendMessage(value);  // 単にメッセージ内容だけを渡す
       inputRef.current.value = '';
-      // 必要に応じて高さをリセット
       inputRef.current.style.height = 'auto';
     }, [sendMessage]);
     
@@ -141,18 +157,19 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
     };
   
 
-    // 高さ調整は必要な場合のみ
-    const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
-      const textarea = e.currentTarget;
-      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight);
-      const lines = textarea.value.split('\n').length;
-      
-      // 単純な計算で高さを設定（パフォーマンス重視）
-      const newHeight = Math.min(lineHeight * lines, 200);
-      if (textarea.offsetHeight !== newHeight) {
-        textarea.style.height = `${newHeight}px`;
-      }
-    }, []);
+  // 高さ調整は必要な場合のみ
+  const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const lineHeight = parseInt(getComputedStyle(textarea).lineHeight);
+    const lines = textarea.value.split('\n').length;
+
+    // 単純な計算で高さを設定（パフォーマンス重視）
+    const newHeight = Math.min(lineHeight * lines, 200);
+    if (textarea.offsetHeight !== newHeight) {
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, []);
+
 
   // カテゴリ更新ハンドラー
   const handleUpdateCategory = async () => {
@@ -367,21 +384,48 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
    
   return (
     <>
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] h-[95dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
-        <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
-          <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-            <span>Chat</span>
-            <Button
-              onClick={handleConvertToNote}
-              variant="ghost"
-              className="text-gray-500 hover:text-gray-700 flex items-center gap-2 h-8 text-sm"
-              disabled={isSummarizing}
-            >
-              {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
-            </Button>
-          </DialogTitle>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[500px] h-[95dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
+          <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
+            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+              <span>Chat</span>
+              <Button
+                onClick={handleConvertToNote}
+                variant="ghost"
+                className="text-gray-500 hover:text-gray-700 flex items-center gap-2 h-8 text-sm"
+                disabled={isSummarizing}
+              >
+                {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
+              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    className="h-8 w-0 p-1 hover:bg-gray-100"
+                  >
+                    <Info className="h-4 w-4 text-gray-400" />
+                  </Button>
+                </PopoverTrigger>
+                <Portal>
+                  <PopoverContent 
+                    className="w-72 z-50" 
+                    sideOffset={5}
+                    side="bottom"
+                    align="start"
+                  >
+                    <div className="grid gap-2">
+                      <h4 className="font-medium leading-none">Note変換について</h4>
+                      <p className="text-sm text-gray-500">
+                        AIとのやりとりをメモ化します。
+                        直近５往復のメッセージを参照し振り返りやすいように取りまとめてくれます。
+                      </p>
+                    </div>
+                  </PopoverContent>
+                </Portal>
+              </Popover>
+            </DialogTitle>
+          </DialogHeader>
         
           <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
             <div className="space-y-4 py-4">
@@ -417,31 +461,74 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
             </div>
           </ScrollArea>
  
+          {/* 履歴サイズ設定 */}
+          <div className="px-4 py-2 border-t bg-white/50 backdrop-blur-sm">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <MessageSquare className="h-4 w-4" />
+                <span>会話履歴：</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <select 
+                  value={historySize}
+                  onChange={handleHistorySizeChange}
+                  className="pl-3 pr-8 py-1 text-sm border rounded-md bg-white/80 
+                            shadow-sm hover:bg-white transition-colors 
+                            focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value={1}>1往復 (2メッセージ)</option>
+                  <option value={2}>2往復 (4メッセージ)</option>
+                  <option value={3}>3往復 (6メッセージ)</option>
+                </select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      className="h-8 w-8 p-0 hover:bg-gray-100"
+                    >
+                      <Info className="h-4 w-4 text-gray-400" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72">
+                    <div className="grid gap-2">
+                      <h4 className="font-medium leading-none">会話履歴について</h4>
+                      <p className="text-sm text-gray-500">
+                        AIの応答に含める過去の会話数を設定します。
+                        多いほど文脈を理解しやすくなりますが、応答が遅くなる可能性があります。
+                      </p>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
 
           {/* 入力フォーム */}
-            <div className="p-4">
+          <div className="p-4">
+            <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2 bg-white rounded-lg p-2 shadow-sm">
-              <textarea
-                ref={inputRef}
-                // value と onChange を削除
-                onInput={handleInput}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder={isMobile ? "メッセージを入力..." : "メッセージを入力... (Shift + Enter で改行)"}
-                className="w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base min-h-[44px] max-h-[200px] resize-none overflow-y-auto"
-                style={{
-                  fontSize: '16px',
-                  lineHeight: '1.5',
-                  WebkitTextSizeAdjust: '100%',
-                }}
-              />
+                <textarea
+                  ref={inputRef}
+                  onInput={handleInput}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  maxLength={MAX_CHARS}
+                  placeholder={isMobile ? "メッセージを入力...(200文字まで)" : "メッセージを入力(200文字まで)... (Shift + Enter で改行)"}
+                  className="w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base min-h-[44px] max-h-[200px] resize-none overflow-y-auto"
+                  style={{
+                    fontSize: '16px',
+                    lineHeight: '1.5',
+                    WebkitTextSizeAdjust: '100%',
+                  }}
+                />
                 <Button
                   onClick={handleSend}
-                  disabled={isLoading || isSummarizing}
+                  disabled={isLoading || isSummarizing || !inputRef.current?.value}
                   size="icon"
                   className="h-8 w-8 shrink-0 rounded-full bg-purple-600 hover:bg-purple-700"
                 >
@@ -449,6 +536,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                 </Button>
               </div>
             </div>
+          </div>
         </DialogContent>
       </Dialog>
  
@@ -586,6 +674,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
           </div>
         </DialogContent>
       </Dialog>
+      
  
       {/* Category Creation/Edit Dialog */}
       <Dialog 

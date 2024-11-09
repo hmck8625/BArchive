@@ -1,11 +1,11 @@
-// src/components/MemoriesSection.tsx
 import { useState, useCallback } from 'react'
-import { useAuth } from '@/lib/hooks/useAuth' 
+import { useAuth } from '@/lib/hooks/useAuth'
 import { Card } from "@/components/ui/card"
 import { formatDate } from '@/lib/utils/formatDate'
 import { EditMemoDialog } from '@/components/EditMemoDialog'
 import { Button } from "@/components/ui/button"
 import { Pencil, Trash2 } from "lucide-react"
+import ReactMarkdown from 'react-markdown'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,8 +22,8 @@ import { Memory } from '@/types'
 interface MemoriesSectionProps {
   memories: Memory[]
   isLoading?: boolean
-  supabase: any // Supabaseのクライアントインスタンス
-  onMemoryUpdate: () => void // メモが更新された時のコールバック
+  supabase: any
+  onMemoryUpdate: () => void
 }
 
 export function MemoriesSection({ 
@@ -32,7 +32,7 @@ export function MemoriesSection({
   supabase,
   onMemoryUpdate 
 }: MemoriesSectionProps) {
-  const { user } = useAuth()  // 追加
+  const { user } = useAuth()
   const [editingMemo, setEditingMemo] = useState<Memory | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -43,7 +43,29 @@ export function MemoriesSection({
   // 文字列を省略する関数
   const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text
-    return `${text.slice(0, maxLength)}...`
+    // 改行を考慮して省略
+    const truncated = text.split('\n').map(line => line.trim()).join(' ').slice(0, maxLength)
+    return `${truncated}...`
+  }
+
+  // プレビュー用のコンテンツを取得
+  const getPreviewContent = (content: string) => {
+    const lines = content.split('\n')
+    let preview = ''
+    let charCount = 0
+
+    for (const line of lines) {
+      if (charCount + line.length > 100) {
+        const remainingChars = 100 - charCount
+        preview += line.slice(0, remainingChars)
+        break
+      }
+      preview += line + '\n'
+      charCount += line.length + 1
+      if (charCount >= 100) break
+    }
+
+    return preview.trim()
   }
 
   // メモの展開/折りたたみを切り替える
@@ -89,7 +111,6 @@ export function MemoriesSection({
 
     setIsDeleting(true)
     try {
-      // 関連付けの削除（source）
       const { error: sourceError } = await supabase
         .from('memory_relations')
         .delete()
@@ -97,7 +118,6 @@ export function MemoriesSection({
 
       if (sourceError) throw sourceError
 
-      // 関連付けの削除（target）
       const { error: targetError } = await supabase
         .from('memory_relations')
         .delete()
@@ -105,12 +125,11 @@ export function MemoriesSection({
 
       if (targetError) throw targetError
 
-      // メモ本体の削除
       const { error: deleteError } = await supabase
         .from('memories')
         .delete()
         .eq('id', memoToDelete.id)
-        .eq('user_id', user.id)  // ユーザーIDの確認を追加
+        .eq('user_id', user.id)
 
       if (deleteError) throw deleteError
 
@@ -151,9 +170,11 @@ export function MemoriesSection({
                   <div className="prose prose-sm max-w-none">
                     {memory.content.length > 100 && !expandedMemos.has(memory.id) ? (
                       <div>
-                        <p className="text-sm text-gray-600">
-                          {truncateText(memory.content, 100)}
-                        </p>
+                        <div className="text-sm text-gray-600">
+                          <ReactMarkdown className="whitespace-pre-wrap">
+                            {getPreviewContent(memory.content)}
+                          </ReactMarkdown>
+                        </div>
                         <button
                           onClick={() => toggleMemoExpansion(memory.id)}
                           className="text-xs text-blue-600 hover:text-blue-800 mt-1"
@@ -163,7 +184,11 @@ export function MemoriesSection({
                       </div>
                     ) : memory.content.length > 100 ? (
                       <div>
-                        <p className="text-sm text-gray-600">{memory.content}</p>
+                        <div className="text-sm text-gray-600">
+                          <ReactMarkdown className="whitespace-pre-wrap">
+                            {memory.content}
+                          </ReactMarkdown>
+                        </div>
                         <button
                           onClick={() => toggleMemoExpansion(memory.id)}
                           className="text-xs text-blue-600 hover:text-blue-800 mt-1"
@@ -172,7 +197,11 @@ export function MemoriesSection({
                         </button>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-600">{memory.content}</p>
+                      <div className="text-sm text-gray-600">
+                        <ReactMarkdown className="whitespace-pre-wrap">
+                          {memory.content}
+                        </ReactMarkdown>
+                      </div>
                     )}
                   </div>
 

@@ -2,6 +2,7 @@
 
 import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 // 環境変数チェック
 if (!process.env.OPENAI_API_KEY) {
@@ -16,7 +17,7 @@ const openai = new OpenAI({
 // 型定義
 type ChatMessage = {
   message: string;
-  context?: Array<{ role: string; content: string; }>;
+  context?: Array<{ role: 'system' | 'user' | 'assistant'; content: string; }>;
 }
 
 type APIErrorDetails = {
@@ -83,15 +84,22 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // 会話履歴の準備（最大3回分）
-    const conversationHistory = context.slice(-6); // role+contentで1回分で2要素なので6つまで
+    // 会話履歴の準備（最大3回分 = 6メッセージ）
+    const conversationHistory: ChatCompletionMessageParam[] = context
+    .slice(-6)
+    .map(msg => ({
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content
+    }));
 
     // OpenAI API呼び出しの準備
-    console.log('Preparing OpenAI API call with message:', message);
+    console.log('Preparing OpenAI API call with conversation history:', {
+      historyLength: conversationHistory.length,
+      newMessage: message
+    });
 
-    // メッセージの構築
-    const messages = [
+    // メッセージの構築（システムプロンプト + 履歴 + 新しいメッセージ）
+    const messages: ChatCompletionMessageParam[] = [
       { role: "system", content: META_PROMPT },
       ...conversationHistory,
       { role: "user", content: message }
@@ -101,9 +109,9 @@ export async function POST(request: Request) {
     console.log('Calling OpenAI API...');
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: message }],
-      temperature: 0.7, // より自然な応答を促す
-      max_tokens: 500, // 応答の長さを制限
+      messages: messages,  // 履歴を含むメッセージ配列を使用
+      temperature: 0.7,
+      max_tokens: 500,
     });
     console.log('OpenAI API response received');
 
@@ -119,15 +127,18 @@ export async function POST(request: Request) {
     const answer = completion.choices[0].message.content;
     console.log('Processing complete. Answer:', answer.substring(0, 50) + '...');
 
+    // 更新された会話履歴を返す（最新の3往復分を維持）
+    const updatedHistory = [
+      ...conversationHistory,
+      { role: "user" as const, content: message },
+      { role: "assistant" as const, content: answer }
+    ].slice(-6);
+
     console.log('--- Chat API Request Completed Successfully ---');
+
     return NextResponse.json({ 
       answer,
-      // 更新された会話履歴を返す
-      context: [
-        ...conversationHistory,
-        { role: "user", content: message },
-        { role: "assistant", content: answer }
-      ].slice(-6) // 最新の3回分のみ保持
+      context: updatedHistory
     });
 
   } catch (error) {
