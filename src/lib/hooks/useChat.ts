@@ -147,7 +147,7 @@ export const useChat = (options: ChatOptions = { historySize: 1 }) => {
   // Step 1: 要約とタイトルの生成
   const generateNotePreview = async () => {
     try {
-      const lastMessages = messages.slice(-10); // 要約するメッセージ数
+      const lastMessages = messages.slice(-5); // 要約するメッセージ数
       
       const conversationText = lastMessages
         .map(msg => `${msg.role}: ${msg.content}`)
