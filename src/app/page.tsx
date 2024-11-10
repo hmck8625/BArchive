@@ -46,6 +46,11 @@ export default function Component() {
 
   const [memories, setMemories] = useState<Memory[]>([]);
   const [filteredMemories, setFilteredMemories] = useState<Memory[]>([]);
+  const [initialChatMessage, setInitialChatMessage] = useState<{
+    id?: string;
+    title?: string;
+    content?: string;
+  } | undefined>();
   
   
   // メモリーの取得を認証状態に依存させる
@@ -265,8 +270,15 @@ export default function Component() {
           isLoading={isLoading}
           supabase={supabase}
           onMemoryUpdate={handleMemoryUpdate}
+          onChatClick={(memory) => {
+            setInitialChatMessage({
+              id: memory.id,
+              title: memory.title,
+              content: memory.content
+            });
+            setIsChatOpen(true);
+          }}
         />
-
         </div>
       </div>
   
@@ -308,9 +320,9 @@ export default function Component() {
             <DialogTitle>Memory Visualization</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-hidden">
-          <MemoVisualization 
-             onMemoryUpdate={fetchMemories}  // fetchMemoriesを渡す
-          />
+            <MemoVisualization 
+              onMemoryUpdate={fetchMemories}  // fetchMemoriesを渡す
+            />   
           </div>
         </DialogContent>
       </Dialog>
@@ -320,8 +332,10 @@ export default function Component() {
         open={isChatOpen}
         onClose={() => {
           setIsChatOpen(false);
-          fetchMemories(); // チャットウィンドウを閉じる際にメモリーを再取得
+          setInitialChatMessage(undefined); // チャットを閉じる際にリセット
+          fetchMemories();
         }}
+        initialMessage={initialChatMessage}
       />
     </div>
   )

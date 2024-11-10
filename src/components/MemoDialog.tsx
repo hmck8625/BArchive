@@ -135,120 +135,128 @@ export function MemoDialog({ open, onOpenChange, onSave, supabase }: MemoDialogP
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        {!user ? (
-          <div className="p-4 text-center">
-            Please log in to create memos.
-          </div>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Create a new memo</DialogTitle>
-            </DialogHeader>
-        
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">
-              Memo Content <span className="text-red-500">*</span>
-            </label>
-            <Textarea
-              placeholder="Type your memo here..."
-              value={memoText}
-              onChange={(e) => setMemoText(e.target.value)}
-              className="min-h-[100px]"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">
-              Category <span className="text-red-500">*</span>
-            </label>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Importance (1-5)</label>
-            <input
-              type="range"
-              min="1"
-              max="5"
-              value={importance}
-              onChange={(e) => setImportance(Number(e.target.value))}
-              className="w-full"
-            />
-            <div className="text-center text-sm text-muted-foreground">
-              {importance}
+<Dialog open={open} onOpenChange={onOpenChange}>
+  <DialogContent className="sm:max-w-[700px] max-h-[80dvh] h-auto overflow-hidden flex flex-col">
+    {!user ? (
+      <div className="p-4 text-center">
+        Please log in to create memos.
+      </div>
+    ) : (
+      <>
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>Create a new memo</DialogTitle>
+        </DialogHeader>
+    
+        {/* スクロール可能な本文エリア */}
+        <div className="flex-1 overflow-y-auto px-1">
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">
+                Memo Content <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                placeholder="Type your memo here..."
+                value={memoText}
+                onChange={(e) => setMemoText(e.target.value)}
+                className="min-h-[200px] text-base leading-relaxed p-4 resize-y"
+              />
             </div>
-          </div>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Related Memos (Optional)</label>
-            
-            {/* Selected Memos Display */}
-            {relatedMemos.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {relatedMemos.map(memo => (
-                  <div 
-                    key={memo.id}
-                    className="flex items-center gap-1 bg-secondary px-2 py-1 rounded-md"
-                  >
-                    <span className="text-sm">{memo.title}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeRelatedMemo(memo.id)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Memo Selection */}
-            {availableMemos.length > 0 && (
-              <Select onValueChange={addRelatedMemo}>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">
+                Category <span className="text-red-500">*</span>
+              </label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Add related memo" />
+                  <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableMemos.map((memo) => (
-                    <SelectItem key={memo.id} value={memo.id}>
-                      {memo.title}
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            )}
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Importance</label>
+              <Select 
+                value={String(importance)} 
+                onValueChange={(value) => setImportance(Number(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select importance level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 - Low Priority</SelectItem>
+                  <SelectItem value="2">2 - Medium-Low Priority</SelectItem>
+                  <SelectItem value="3">3 - Medium Priority</SelectItem>
+                  <SelectItem value="4">4 - Medium-High Priority</SelectItem>
+                  <SelectItem value="5">5 - High Priority</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Related Memos (Optional)</label>
+              
+              {/* Selected Memos Display */}
+              {relatedMemos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {relatedMemos.map(memo => (
+                    <div 
+                      key={memo.id}
+                      className="flex items-center gap-1 bg-secondary px-2 py-1 rounded-md"
+                    >
+                      <span className="text-sm">{memo.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeRelatedMemo(memo.id)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Memo Selection */}
+              {availableMemos.length > 0 && (
+                <Select onValueChange={addRelatedMemo}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Add related memo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableMemos.map((memo) => (
+                      <SelectItem key={memo.id} value={memo.id}>
+                        {memo.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
         </div>
 
-        <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSave}
-                disabled={isLoading || !memoText.trim() || !selectedCategory}
-              >
-                {isLoading ? 'Saving...' : 'Save'}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+        {/* 固定フッター */}
+        <div className="flex justify-end space-x-2 pt-4 border-t mt-auto flex-shrink-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSave}
+            disabled={isLoading || !memoText.trim() || !selectedCategory}
+          >
+            {isLoading ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
+      </>
+    )}
+  </DialogContent>
+</Dialog>
   )
 }

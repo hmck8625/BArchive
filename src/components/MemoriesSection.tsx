@@ -1,10 +1,12 @@
+// app/components/MemoriesSection.tsx
+
 import { useState, useCallback } from 'react'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { Card } from "@/components/ui/card"
 import { formatDate } from '@/lib/utils/formatDate'
 import { EditMemoDialog } from '@/components/EditMemoDialog'
 import { Button } from "@/components/ui/button"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, MessageCircle } from "lucide-react"
 import ReactMarkdown from 'react-markdown'
 import {
   AlertDialog,
@@ -24,13 +26,17 @@ interface MemoriesSectionProps {
   isLoading?: boolean
   supabase: any
   onMemoryUpdate: () => void
+  onChatClick: (memory: { id: string, title: string, content: string }) => void  // 新しいプロパティ
 }
+
+
 
 export function MemoriesSection({ 
   memories, 
   isLoading = false, 
   supabase,
-  onMemoryUpdate 
+  onMemoryUpdate,
+  onChatClick  // 新しいプロップスを追加
 }: MemoriesSectionProps) {
   const { user } = useAuth()
   const [editingMemo, setEditingMemo] = useState<Memory | null>(null)
@@ -145,6 +151,16 @@ export function MemoriesSection({
     }
   }
 
+  // チャットボタンのクリックハンドラー
+  const handleChatClick = useCallback((memory: Memory) => {
+    const chatPrompt = `このメモについて詳しく教えてください：\n\n${memory.title}\n\n${memory.content}`;
+    onChatClick({
+      id: memory.id,
+      title: memory.title || '',  // titleがundefinedの場合は空文字を使用
+      content: memory.content
+    });
+  }, [onChatClick]);
+
   return (
     <div className="mb-6">
       <h2 className="text-gray-700 mb-2">{memories.length} Knowledge Archives</h2>
@@ -218,27 +234,38 @@ export function MemoriesSection({
                   </div>
                 </div>
 
-                {/* アクションボタン */}
-                {canEditMemo(memory) && (
+                {/* アクションボタン - チャットボタンを追加 */}
                 <div className="flex flex-col gap-1 ml-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="p-1 h-7 w-7"
-                    onClick={() => handleEdit(memory)}
+                    className="p-1 h-7 w-7 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+                    onClick={() => handleChatClick(memory)}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    <MessageCircle className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="p-1 h-7 w-7"
-                    onClick={() => handleDeleteClick(memory)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+
+                  {canEditMemo(memory) && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-1 h-7 w-7"
+                        onClick={() => handleEdit(memory)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-1 h-7 w-7"
+                        onClick={() => handleDeleteClick(memory)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
                 </div>
-                )}
               </div>
             </Card>
           ))}

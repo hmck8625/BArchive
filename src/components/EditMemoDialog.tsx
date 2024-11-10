@@ -274,192 +274,215 @@ export function EditMemoDialog({ memo, open, onOpenChange, onSave, supabase, onM
 
     return (
       <>
-        <Dialog open={open} onOpenChange={onOpenChange}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Edit Memo</DialogTitle>
-            </DialogHeader>
-            
-            <div className="grid gap-4 py-4">
-              {/* Title input (unchanged) */}
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">
-                  Title <span className="text-red-500">*</span>
-                </label>
-                <Textarea
-                  placeholder="Memo title..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="min-h-[60px]"
-                />
-              </div>
-        
-              {/* Content input (unchanged) */}
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">
-                  Content <span className="text-red-500">*</span>
-                </label>
-                <Textarea
-                  placeholder="Memo content..."
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className="min-h-[100px]"
-                />
-              </div>
-        
-              {/* Category selection with creation button */}
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <Select value={categoryId} onValueChange={setCategoryId}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Select a category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id} className="flex justify-between items-center">
-                          <span>{cat.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="ml-2 h-6 w-6"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              startEditingCategory(cat);
-                            }}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setIsNewCategoryDialogOpen(true)}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-  
-          {/* Importance slider */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Importance (1-5)</label>
-            <Slider
-              value={[importance]}
-              onValueChange={([value]) => setImportance(value)}
-              max={5}
-              min={1}
-              step={1}
-            />
-            <div className="text-center text-sm text-muted-foreground">
-              {importance}
+{/* メインの編集ダイアログ */}
+<Dialog open={open} onOpenChange={onOpenChange}>
+  <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[100dvh] flex flex-col">
+    <DialogHeader className="px-4 py-2 border-b flex-shrink-0">
+      <DialogTitle>Edit Memo</DialogTitle>
+    </DialogHeader>
+    
+    {/* スクロール可能なメインコンテンツ */}
+    <div className="flex-1 overflow-y-auto">
+      <div className="p-4 space-y-6">
+        {/* Title Section */}
+        <div className="space-y-2">
+          <label htmlFor="title" className="text-sm font-medium">
+            Title <span className="text-red-500">*</span>
+          </label>
+          <Textarea
+            id="title"
+            placeholder="Memo title..."
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="min-h-[60px] w-full"
+          />
+        </div>
+
+        {/* Content Section */}
+        <div className="space-y-2">
+          <label htmlFor="content" className="text-sm font-medium">
+            Content <span className="text-red-500">*</span>
+          </label>
+          <Textarea
+            id="content"
+            placeholder="Memo content..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="min-h-[300px] text-base leading-relaxed p-4 w-full"
+          />
+        </div>
+
+        {/* Category Section */}
+        <div className="space-y-2">
+          <label htmlFor="category" className="text-sm font-medium">
+            Category <span className="text-red-500">*</span>
+          </label>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id} className="flex justify-between items-center">
+                      <span>{cat.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-2 h-6 w-6"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          startEditingCategory(cat);
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setIsNewCategoryDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
-  
-          {/* Related memos - チェックボックスバージョン */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Related Memos</label>
-            <div className="border rounded-md p-4 max-h-[200px] overflow-y-auto">
-              <div className="grid gap-2">
-                {existingMemos.map((memo) => (
-                  <div key={memo.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={memo.id}
-                      checked={relatedMemos.includes(memo.id)}
-                      onChange={() => {
-                        setRelatedMemos(prev =>
-                          prev.includes(memo.id)
-                            ? prev.filter(id => id !== memo.id)
-                            : [...prev, memo.id]
-                        )
-                      }}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <label htmlFor={memo.id} className="ml-2 text-sm">
-                      {memo.title}
-                    </label>
-                  </div>
-                ))}
-              </div>
+        </div>
+
+        {/* Importance Section */}
+        <div className="space-y-2">
+          <label htmlFor="importance" className="text-sm font-medium">
+            Importance
+          </label>
+          <Select 
+            value={String(importance)} 
+            onValueChange={(value) => setImportance(Number(value))}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select importance level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1 - Low Priority</SelectItem>
+              <SelectItem value="2">2 - Medium-Low Priority</SelectItem>
+              <SelectItem value="3">3 - Medium Priority</SelectItem>
+              <SelectItem value="4">4 - Medium-High Priority</SelectItem>
+              <SelectItem value="5">5 - High Priority</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Related Memos Section */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Related Memos</label>
+          <div className="border rounded-md p-4 max-h-[200px] overflow-y-auto bg-white">
+            <div className="space-y-2">
+              {existingMemos.map((memo) => (
+                <div key={memo.id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={memo.id}
+                    checked={relatedMemos.includes(memo.id)}
+                    onChange={() => {
+                      setRelatedMemos(prev =>
+                        prev.includes(memo.id)
+                          ? prev.filter(id => id !== memo.id)
+                          : [...prev, memo.id]
+                      )
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor={memo.id} className="ml-2 text-sm">
+                    {memo.title}
+                  </label>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-        <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSave}
-              disabled={isLoading || !title.trim() || !content.trim() || !categoryId}
-            >
-              {isLoading ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Category Creation/Edit Dialog */}
-      <Dialog 
-        open={isNewCategoryDialogOpen} 
-        onOpenChange={(open) => {
-          setIsNewCategoryDialogOpen(open);
-          if (!open) {
+        {/* 下部の余白を追加 */}
+        <div className="h-4" />
+      </div>
+    </div>
+
+    {/* 固定フッター */}
+    <div className="border-t bg-white p-4 flex justify-end gap-2 flex-shrink-0">
+      <Button variant="outline" onClick={() => onOpenChange(false)}>
+        Cancel
+      </Button>
+      <Button 
+        onClick={handleSave}
+        disabled={isLoading || !title.trim() || !content.trim() || !categoryId}
+      >
+        {isLoading ? 'Saving...' : 'Save'}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
+
+{/* Category Creation/Edit Dialog */}
+<Dialog 
+  open={isNewCategoryDialogOpen} 
+  onOpenChange={(open) => {
+    setIsNewCategoryDialogOpen(open);
+    if (!open) {
+      setEditingCategory(null);
+      setNewCategoryName("");
+    }
+  }}
+>
+  <DialogContent className="sm:max-w-[425px]">
+    <DialogHeader>
+      <DialogTitle>
+        {editingCategory ? 'Edit Category' : 'Create New Category'}
+      </DialogTitle>
+    </DialogHeader>
+    
+    <div className="p-4 space-y-4">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">
+          Category Name <span className="text-red-500">*</span>
+        </label>
+        <Input
+          type="text"
+          placeholder="Enter category name..."
+          value={newCategoryName}
+          onChange={(e) => setNewCategoryName(e.target.value)}
+          className="w-full"
+        />
+      </div>
+    </div>
+
+    <DialogFooter className="px-4 py-4 border-t">
+      <div className="flex justify-end gap-2 w-full">
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            setIsNewCategoryDialogOpen(false);
             setEditingCategory(null);
             setNewCategoryName("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCategory ? 'Edit Category' : 'Create New Category'}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">
-                Category Name <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="text"
-                placeholder="Enter category name..."
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsNewCategoryDialogOpen(false);
-                setEditingCategory(null);
-                setNewCategoryName("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
-              disabled={isCreatingCategory || !newCategoryName.trim()}
-            >
-              {isCreatingCategory 
-                ? (editingCategory ? 'Updating...' : 'Creating...') 
-                : (editingCategory ? 'Update' : 'Create')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
+          disabled={isCreatingCategory || !newCategoryName.trim()}
+        >
+          {isCreatingCategory 
+            ? (editingCategory ? 'Updating...' : 'Creating...') 
+            : (editingCategory ? 'Update' : 'Create')}
+        </Button>
+      </div>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
     </>
   )
 }

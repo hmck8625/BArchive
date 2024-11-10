@@ -38,8 +38,12 @@ const supabase = createClient(
 interface ChatWindowProps {
   open: boolean;
   onClose: () => void;
+  initialMessage?: {
+    id?: string;
+    title?: string;
+    content?: string;
+  };
 }
-
 interface Category {
   id: string;
   name: string;
@@ -50,7 +54,7 @@ interface ExistingMemo {
   title: string;
 }
 
-export function ChatWindow({ open, onClose }: ChatWindowProps) {
+export function ChatWindow({ open, onClose, initialMessage }: ChatWindowProps) {
   const MAX_CHARS = 200; // 最大文字数
 
   const { user } = useAuth();  // useAuthを使用
@@ -71,11 +75,13 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
   const [existingMemos, setExistingMemos] = useState<ExistingMemo[]>([]);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null); 
+  const [initialMemoId, setInitialMemoId] = useState<string | undefined>();
 
   // カテゴリ作成用の状態を追加
   const [isNewCategoryDialogOpen, setIsNewCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [hasInitialMessageSent, setHasInitialMessageSent] = useState(false);
 
   // 履歴サイズ変更用のセレクトボックス
   const handleHistorySizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -114,6 +120,39 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
     }
   }, [isNoteDialogOpen, user]);  // user を依存配列に追加
 
+// 初期メッセージの送信を処理
+useEffect(() => {
+  if (open && initialMessage?.content && !hasInitialMessageSent) {
+    console.log('Setting initial message and ID...', {
+      id: initialMessage.id,
+      title: initialMessage.title,
+    });
+
+    // 重要: initialMemoIdを設定
+    if (initialMessage.id) {
+      setInitialMemoId(initialMessage.id);
+      console.log('Set initialMemoId:', initialMessage.id);
+    }
+    
+    const prompt = initialMessage.title
+        ? `以下のメモについて、一緒に考えを深めていきましょう：
+\`\`\`text
+タイトル：
+${initialMessage.title}
+内容：
+${initialMessage.content}
+\`\`\`
+このトピックで特に興味深いと感じた部分や、さらに掘り下げたい点について言及してください。`
+    : initialMessage.content;
+    sendMessage(prompt);
+    setHasInitialMessageSent(true);
+  }
+    // チャットが閉じられたらフラグをリセット
+    if (!open) {
+      setHasInitialMessageSent(false);
+      setInitialMemoId(undefined); // チャットが閉じられたらリセット
+    }
+  }, [open, initialMessage?.content, initialMessage?.title, initialMessage?.id, hasInitialMessageSent]);
 
     // モバイル端末の検出
     useEffect(() => {
@@ -256,14 +295,29 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
 
   // Convert to Note ボタンのハンドラー
   const handleConvertToNote = async () => {
+    console.log('summariging');
+
     setIsSummarizing(true);
     try {
       const preview = await generateNotePreview();
       if (preview) {
         setEditedTitle(preview.title);
         setEditedContent(preview.content);
+        console.log('preview.title', preview.title);
+        console.log('initialMemoId', initialMemoId);
+
+
+        // 初期メモがある場合、それを関連メモとして設定
+        if (initialMemoId) {
+          console.log('initialMemoId', initialMemoId);
+          const memo = existingMemos.find(m => m.id === initialMemoId);
+          if (memo) {
+            setRelatedMemos([memo]);
+          }
+        }
         setIsNoteDialogOpen(true);
       }
+
     } catch (error) {
       console.error('Error generating preview:', error);
       alert('Failed to generate summary');
@@ -351,83 +405,94 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
   }
 
   // MessageContentコンポーネントの修正
-  const MessageContent = ({ content }: { content: string }) => {
-    return (
-      <ReactMarkdown
-        components={{
-          code({ node, className, children, ...props }) {
-            const match = /language-(\w+)/.exec(className || '');
-            const isInline = !match;
-            return isInline ? (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            ) : (
+const MessageContent = ({ content }: { content: string }) => {
+  return (
+    <ReactMarkdown
+      components={{
+        code({ node, className, children, ...props }) {
+          const match = /language-(\w+)/.exec(className || '');
+          const isInline = !match;
+          return isInline ? (
+            <code className={className} {...props}>
+              {children}
+            </code>
+          ) : (
+            <div className="max-w-full overflow-x-auto"> {/* コードブロックのラッパーを追加 */}
               <SyntaxHighlighter
                 style={oneLight}
                 language={match[1]}
                 PreTag="div"
+                className="rounded-md"
               >
                 {String(children).replace(/\n$/, '')}
               </SyntaxHighlighter>
-            );
-          },
-          p({ children }) {
-            return <p className="whitespace-pre-wrap mb-4">{children}</p>;
-          },
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    );
-  };
+            </div>
+          );
+        },
+        p({ children }) {
+          return <p className="whitespace-pre-wrap mb-4 break-words">{children}</p>; // break-words を追加
+        },
+        pre({ children }) {
+          return <pre className="max-w-full overflow-x-auto">{children}</pre>; // pre タグにもスタイルを追加
+        }
+      }}
+      className="prose prose-sm max-w-none break-words" // break-words を追加
+    >
+      {content}
+    </ReactMarkdown>
+  );
+};
    
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[500px] h-[95dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
-          <DialogHeader className="flex flex-row justify-between items-center p-4 border-b">
-            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-              <span>Chat</span>
-              <Button
-                onClick={handleConvertToNote}
-                variant="ghost"
-                className="text-gray-500 hover:text-gray-700 flex items-center gap-2 h-8 text-sm"
-                disabled={isSummarizing}
-              >
-                {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
-              </Button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-8 w-0 p-1 hover:bg-gray-100"
-                  >
-                    <Info className="h-4 w-4 text-gray-400" />
-                  </Button>
-                </PopoverTrigger>
-                <Portal>
-                  <PopoverContent 
-                    className="w-72 z-50" 
-                    sideOffset={5}
-                    side="bottom"
-                    align="start"
-                  >
-                    <div className="grid gap-2">
-                      <h4 className="font-medium leading-none">Note変換について</h4>
-                      <p className="text-sm text-gray-500">
-                        AIとのやりとりをメモ化します。
-                        直近５往復のメッセージを参照し振り返りやすいように取りまとめてくれます。
-                      </p>
-                    </div>
-                  </PopoverContent>
-                </Portal>
-              </Popover>
-            </DialogTitle>
-          </DialogHeader>
-        
-          <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
+return (
+  <>
+    {/* メインチャットダイアログ */}
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[100dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
+        {/* ヘッダー */}
+        <DialogHeader className="flex flex-row justify-between items-center p-4 border-b flex-shrink-0">
+          <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+            <span>Chat</span>
+            <Button
+              onClick={handleConvertToNote}
+              variant="ghost"
+              className="text-gray-500 hover:text-gray-700 flex items-center gap-2 h-8 text-sm"
+              disabled={isSummarizing}
+            >
+              {isSummarizing ? 'Generating Summary...' : 'Convert to Note'}
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 p-1 hover:bg-gray-100"
+                >
+                  <Info className="h-4 w-4 text-gray-400" />
+                </Button>
+              </PopoverTrigger>
+              <Portal>
+                <PopoverContent 
+                  className="w-72 z-50" 
+                  sideOffset={5}
+                  side="bottom"
+                  align="start"
+                >
+                  <div className="grid gap-2">
+                    <h4 className="font-medium leading-none">Note変換について</h4>
+                    <p className="text-sm text-gray-500">
+                      AIとのやりとりをメモ化します。
+                      直近５往復のメッセージを参照し振り返りやすいように取りまとめてくれます。
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Portal>
+            </Popover>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* メッセージエリア */}
+        <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="h-full px-4" ref={scrollAreaRef}>
             <div className="space-y-4 py-4">
               {messages.map((message) => (
                 <div
@@ -441,7 +506,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                       message.role === 'user'
                         ? 'bg-white text-gray-900'
                         : 'bg-white text-gray-900'
-                    } shadow-sm`}
+                    } shadow-sm overflow-hidden break-words`}
                   >
                     <MessageContent content={message.content} />
                   </div>
@@ -460,124 +525,134 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
               )}
             </div>
           </ScrollArea>
- 
-          {/* 履歴サイズ設定 */}
-          <div className="px-4 py-2 border-t bg-white/50 backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-gray-600">
-                <MessageSquare className="h-4 w-4" />
-                <span>会話履歴：</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <select 
-                  value={historySize}
-                  onChange={handleHistorySizeChange}
-                  className="pl-3 pr-8 py-1 text-sm border rounded-md bg-white/80 
-                            shadow-sm hover:bg-white transition-colors 
-                            focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value={1}>1往復 (2メッセージ)</option>
-                  <option value={2}>2往復 (4メッセージ)</option>
-                  <option value={3}>3往復 (6メッセージ)</option>
-                </select>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      className="h-8 w-8 p-0 hover:bg-gray-100"
-                    >
-                      <Info className="h-4 w-4 text-gray-400" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72">
-                    <div className="grid gap-2">
-                      <h4 className="font-medium leading-none">会話履歴について</h4>
-                      <p className="text-sm text-gray-500">
-                        AIの応答に含める過去の会話数を設定します。
-                        多いほど文脈を理解しやすくなりますが、応答が遅くなる可能性があります。
-                      </p>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          </div>
+        </div>
 
-          {/* 入力フォーム */}
-          <div className="p-4">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 bg-white rounded-lg p-2 shadow-sm">
-                <textarea
-                  ref={inputRef}
-                  onInput={handleInput}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  maxLength={MAX_CHARS}
-                  placeholder={isMobile ? "メッセージを入力...(200文字まで)" : "メッセージを入力(200文字まで)... (Shift + Enter で改行)"}
-                  className="w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base min-h-[44px] max-h-[200px] resize-none overflow-y-auto"
-                  style={{
-                    fontSize: '16px',
-                    lineHeight: '1.5',
-                    WebkitTextSizeAdjust: '100%',
-                  }}
-                />
-                <Button
-                  onClick={handleSend}
-                  disabled={isLoading || isSummarizing || !inputRef.current?.value}
-                  size="icon"
-                  className="h-8 w-8 shrink-0 rounded-full bg-purple-600 hover:bg-purple-700"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+        {/* 履歴サイズ設定 */}
+        <div className="px-4 py-2 border-t bg-white/50 backdrop-blur-sm flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <MessageSquare className="h-4 w-4" />
+              <span>会話履歴：</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <select 
+                value={historySize}
+                onChange={handleHistorySizeChange}
+                className="pl-3 pr-8 py-1 text-sm border rounded-md bg-white/80 
+                          shadow-sm hover:bg-white transition-colors 
+                          focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value={1}>1往復 (2メッセージ)</option>
+                <option value={2}>2往復 (4メッセージ)</option>
+                <option value={3}>3往復 (6メッセージ)</option>
+              </select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    className="h-8 w-8 p-0 hover:bg-gray-100"
+                  >
+                    <Info className="h-4 w-4 text-gray-400" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72">
+                  <div className="grid gap-2">
+                    <h4 className="font-medium leading-none">会話履歴について</h4>
+                    <p className="text-sm text-gray-500">
+                      AIの応答に含める過去の会話数を設定します。
+                      多いほど文脈を理解しやすくなりますが、応答が遅くなる可能性があります。
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
- 
-      {/* メモ編集用のダイアログ */}
-      <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Create New Note</DialogTitle>
-          </DialogHeader>
-          
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Title</label>
+        </div>
+
+        {/* 入力エリア */}
+        <div className="p-4 border-t bg-white/50 backdrop-blur-sm flex-shrink-0">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 bg-white rounded-lg p-2 shadow-sm">
+              <textarea
+                ref={inputRef}
+                onInput={handleInput}
+                onKeyDown={handleKeyPress}
+                maxLength={MAX_CHARS}
+                placeholder={isMobile ? "メッセージを入力...(200文字まで)" : "メッセージを入力(200文字まで)... (Shift + Enter で改行)"}
+                className="w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base min-h-[44px] max-h-[200px] resize-none overflow-y-auto"
+                style={{
+                  fontSize: '16px',
+                  lineHeight: '1.5',
+                  WebkitTextSizeAdjust: '100%',
+                }}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={isLoading || isSummarizing}
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-full bg-purple-600 hover:bg-purple-700"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* メモ作成ダイアログ */}
+    <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
+      <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[100dvh] flex flex-col">
+        <DialogHeader className="px-4 py-2 border-b flex-shrink-0">
+          <DialogTitle>Create New Note</DialogTitle>
+        </DialogHeader>
+        
+        {/* スクロール可能なメインコンテンツ */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 space-y-6">
+            {/* Title Section */}
+            <div className="space-y-2">
+              <label htmlFor="title" className="text-sm font-medium">
+                Title <span className="text-red-500">*</span>
+              </label>
               <Input
+                id="title"
                 value={editedTitle}
                 onChange={(e) => setEditedTitle(e.target.value)}
                 placeholder="Note title..."
+                className="w-full"
               />
             </div>
- 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Content</label>
+
+            {/* Content Section */}
+            <div className="space-y-2">
+              <label htmlFor="content" className="text-sm font-medium">
+                Content <span className="text-red-500">*</span>
+              </label>
               <Textarea
+                id="content"
                 value={editedContent}
                 onChange={(e) => setEditedContent(e.target.value)}
                 placeholder="Note content..."
-                className="min-h-[200px]"
+                className="min-h-[300px] text-base leading-relaxed p-4 w-full"
               />
             </div>
- 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Category</label>
+
+            {/* Category Section */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Category <span className="text-red-500">*</span>
+              </label>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a category" />
                     </SelectTrigger>
                     <SelectContent>
                       {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id} className="flex justify-between items-center">
+                        <SelectItem key={cat.id} value={cat.id}>
                           <span>{cat.name}</span>
                           <Button
                             variant="ghost"
@@ -610,23 +685,29 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                 </Button>
               </div>
             </div>
- 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Importance (1-5)</label>
-              <input
-                type="range"
-                min="1"
-                max="5"
-                value={importance}
-                onChange={(e) => setImportance(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="text-center text-sm text-muted-foreground">
-                {importance}
-              </div>
+
+            {/* Importance Section */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Importance</label>
+              <Select 
+                value={String(importance)} 
+                onValueChange={(value) => setImportance(Number(value))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select importance level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 - Low Priority</SelectItem>
+                  <SelectItem value="2">2 - Medium-Low Priority</SelectItem>
+                  <SelectItem value="3">3 - Medium Priority</SelectItem>
+                  <SelectItem value="4">4 - Medium-High Priority</SelectItem>
+                  <SelectItem value="5">5 - High Priority</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
- 
-            <div className="grid gap-2">
+
+            {/* Related Memos Section */}
+            <div className="space-y-2">
               <label className="text-sm font-medium">Related Memos</label>
               {relatedMemos.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
@@ -648,7 +729,7 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
               )}
               
               <Select onValueChange={addRelatedMemo}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Add related memo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -662,74 +743,26 @@ export function ChatWindow({ open, onClose }: ChatWindowProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Bottom spacing */}
+            <div className="h-4" />
           </div>
- 
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => setIsNoteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveNote}>
-              Save Note
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
- 
-      {/* Category Creation/Edit Dialog */}
-      <Dialog 
-        open={isNewCategoryDialogOpen} 
-        onOpenChange={(open) => {
-          setIsNewCategoryDialogOpen(open);
-          if (!open) {
-            setEditingCategory(null);
-            setNewCategoryName("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCategory ? 'Edit Category' : 'Create New Category'}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">
-                Category Name <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="text"
-                placeholder="Enter category name..."
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-              />
-            </div>
-          </div>
- 
-          <div className="flex justify-end space-x-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsNewCategoryDialogOpen(false);
-                setEditingCategory(null);
-                setNewCategoryName("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
-              disabled={isCreatingCategory || !newCategoryName.trim()}
-            >
-              {isCreatingCategory 
-                ? (editingCategory ? 'Updating...' : 'Creating...') 
-                : (editingCategory ? 'Update' : 'Create')}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
- }
+        </div>
+
+        {/* 固定フッター */}
+        <div className="border-t bg-white p-4 flex justify-end gap-2 flex-shrink-0">
+          <Button variant="outline" onClick={() => setIsNoteDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSaveNote}
+            disabled={isLoading || !editedTitle.trim() || !editedContent.trim() || !selectedCategory}
+          >
+            {isLoading ? 'Saving...' : 'Save Note'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
+);
+}
