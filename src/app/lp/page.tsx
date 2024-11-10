@@ -199,7 +199,7 @@ export default function Component() {
 
       {/* Footer */}
       <footer className="py-8 px-6 text-center text-gray-400 text-sm font-light">
-        <p>&copy; 2024 AI Memo App. All rights reserved.</p>
+        <p>&copy; 2024 Reflection Memo App. All rights reserved.</p>
       </footer>
     </div>
   )
