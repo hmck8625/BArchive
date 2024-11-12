@@ -284,7 +284,7 @@ export default function Component() {
   
     {/* Bottom Navigation - クラス名を変更 */}
     <div className="bottom-nav-fixed">
-      <div className="flex justify-around p-2">
+      <div className="flex justify-around p-4">
         <Button variant="ghost" size="sm" onClick={() => setIsMemoOpen(true)}>
           <PenLine className="h-4 w-4 mr-1" />
           Memo

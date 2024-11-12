@@ -9,7 +9,7 @@ export default function Component() {
     <div className="bg-gradient-to-br from-black via-gray-900 to-indigo-950 text-white font-sans min-h-screen">
       {/* Hero Section */}
       <section className="min-h-screen flex flex-col justify-center items-center p-6 relative overflow-hidden max-w-7xl mx-auto">
-        <div className="absolute inset-0 bg-[url('/images/visualizemov.mov?height=1080&width=1920')] bg-cover bg-center opacity-10"></div>
+        <div className="absolute inset-0 bg-[url('/images/visualizemov.mov?height=1080&width=1920')] bg-cover bg-center opacity-10 z-0"></div>
         <motion.h1 
           className="text-4xl md:text-6xl font-bold mb-4 text-center text-white"
           initial={{ opacity: 0, y: 20 }}
@@ -41,7 +41,7 @@ export default function Component() {
             playsInline
           />
         </motion.div>
-        <div className="flex gap-4 flex-wrap justify-center">
+        <div className="flex gap-4 flex-wrap justify-center z-10">
           <motion.a 
             href="https://b-archive.vercel.app/"
             className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-10 py-3 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300"
@@ -51,12 +51,12 @@ export default function Component() {
             Webではじめる
           </motion.a>
           <motion.a
-            href="https://b-archive.vercel.app/"
+            href="https://apps.apple.com/jp/app/memoryai-%E5%AD%A6%E3%81%B3%E3%81%AE%E3%83%A1%E3%83%A2%E5%B8%B3/id6738000912"
             className="bg-gradient-to-r from-gray-200 to-gray-100 text-gray-800 px-6 py-3 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            iOS(準備中)
+            iOSではじめる
           </motion.a>
           <motion.a 
             href="https://b-archive.vercel.app/"
@@ -179,12 +179,12 @@ export default function Component() {
             Webではじめる
           </motion.a>
           <motion.a
-            href="https://b-archive.vercel.app/"
+            href="https://apps.apple.com/jp/app/memoryai-%E5%AD%A6%E3%81%B3%E3%81%AE%E3%83%A1%E3%83%A2%E5%B8%B3/id6738000912"
             className="bg-gradient-to-r from-gray-200 to-gray-100 text-gray-800 px-6 py-3 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            iOS(準備中)
+            iOSではじめる
           </motion.a>
           <motion.a 
             href="https://b-archive.vercel.app/"
