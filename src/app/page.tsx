@@ -229,7 +229,7 @@ export default function Component() {
     <div className="min-h-screen bg-[#FAF9F6] relative">
       <div className="p-4 main-content-wrapper">
         {/* Top Navigation */}
-        <div className="flex justify-between items-center mb-8 mt-6"> {/* mt-6 を追加 */}
+        <div className="flex justify-between items-center mb-4 mt-10"> {/* mt-6 を追加 */}
           <Button 
             variant="ghost" 
             className="bg-[#F3E5F5] text-purple-800 hover:bg-[#E1BEE7]"
@@ -244,7 +244,7 @@ export default function Component() {
         {/* Main Content */}
         <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-4">
           <div className="flex justify-center mb-2">
             <div className="flex items-center space-x-1">
               <div className="w-3 h-8 bg-purple-400 rounded-sm transform hover:scale-y-110 transition-transform" />

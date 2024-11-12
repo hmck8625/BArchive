@@ -447,7 +447,7 @@ return (
   <>
     {/* メインチャットダイアログ */}
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[100dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
+      <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[95dvh] flex flex-col p-0 bg-gradient-to-b from-purple-50 to-pink-50">
         {/* ヘッダー */}
         <DialogHeader className="flex flex-row justify-between items-center p-4 border-b flex-shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
@@ -603,7 +603,7 @@ return (
 
     {/* メモ作成ダイアログ */}
     <Dialog open={isNoteDialogOpen} onOpenChange={setIsNoteDialogOpen}>
-      <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[100dvh] flex flex-col">
+      <DialogContent className="sm:max-w-[700px] sm:h-[90vh] h-[95dvh] flex flex-col">
         <DialogHeader className="px-4 py-2 border-b flex-shrink-0">
           <DialogTitle>Create New Note</DialogTitle>
         </DialogHeader>
