@@ -83,6 +83,9 @@ export function ChatWindow({ open, onClose, initialMessage }: ChatWindowProps) {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [hasInitialMessageSent, setHasInitialMessageSent] = useState(false);
 
+  // IME入力中かどうかを管理するstate
+  const [isComposing, setIsComposing] = useState(false);
+
   // 履歴サイズ変更用のセレクトボックス
   const handleHistorySizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newSize = parseInt(e.target.value);
@@ -178,6 +181,11 @@ ${initialMessage.content}
     
     // キー入力のハンドラー
     const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // IME入力中は処理をスキップ
+      if (isComposing) {
+        return;
+      }
+
       if (e.key === 'Enter') {
         if (isMobile) {
           // モバイルの場合は通常の改行として処理
@@ -185,15 +193,25 @@ ${initialMessage.content}
         }
         
         if (e.shiftKey) {
-          // デスクトップでShift + Enterの場合は改行
+          // Shift + Enterの場合は改行
           return;
         }
         
-        // デスクトップでEnterのみの場合は送信
+        // 通常のEnterの場合は送信
         e.preventDefault();
         handleSend();
       }
     };
+
+  // IME入力開始時のハンドラー
+  const handleCompositionStart = () => {
+    setIsComposing(true);
+  };
+
+  // IME入力終了時のハンドラー
+  const handleCompositionEnd = () => {
+    setIsComposing(false);
+  };
   
 
   // 高さ調整は必要な場合のみ
@@ -399,7 +417,7 @@ ${initialMessage.content}
   function LoadingAnimation() {
     return (
       <div className="flex items-center justify-center">
-        <div className="animate-bounce">😊</div>
+        <div className="animate-bounce text-sm text-gray-500">Generating...</div>
       </div>
     );
   }
@@ -542,9 +560,9 @@ return (
                           shadow-sm hover:bg-white transition-colors 
                           focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value={1}>1往復 (2メッセージ)</option>
                 <option value={2}>2往復 (4メッセージ)</option>
-                <option value={3}>3往復 (6メッセージ)</option>
+                <option value={4}>4往復 (8メッセージ)</option>
+                <option value={6}>6往復 (12メッセージ)</option>
               </select>
               <Popover>
                 <PopoverTrigger asChild>
@@ -578,6 +596,8 @@ return (
                 ref={inputRef}
                 onInput={handleInput}
                 onKeyDown={handleKeyPress}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
                 maxLength={MAX_CHARS}
                 placeholder={isMobile ? "メッセージを入力...(200文字まで)" : "メッセージを入力(200文字まで)... (Shift + Enter で改行)"}
                 className="w-full border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base min-h-[44px] max-h-[200px] resize-none overflow-y-auto"
